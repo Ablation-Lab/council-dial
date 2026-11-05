@@ -1,0 +1,3 @@
+[
+  { "id": "DISCLOSE", "file": "plugin/skills/council-dial/scripts/council.mjs", "reason": "Line 84 is the --log-dir check: a pattern that recognises Windows 8.3 short names (such as REVIEW~1) so they can be refused. The ~ is part of that pattern, not a home-folder path; the script writes only the review log inside the project." }
+]
