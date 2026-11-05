@@ -1,6 +1,6 @@
 # Council Dial
 
-Council Dial runs a review council of Claude subagents the way you choose, and keeps a log of which way it ran and what it found. You set the dials: specialised or generalist reviewers; a judge, a pooled list or a consensus to combine their reports; an optional debate round; reviewers in parallel or one after another; and an optional single reviewer working alone as a baseline. Over time the log shows which kinds of council find more real problems, and which fixes held up, for the time and agents they take.
+When you want code, docs or a plan reviewed, Council Dial has Claude run a review council of subagents set up the way you choose: specialised or generalist reviewers, a judge, a pooled list or a majority consensus to combine their findings, and optional debate, sequential and single-reviewer baseline runs. Claude tells you how many subagents a run will use and waits for your yes. Each run's type and results go into a log in your project, so you can compare council types over time.
 
 It was made for research on review councils, where the question isn't only "what did the review find?" but "which kind of review finds the most for the effort?". It adds one skill, `council-dial` (in Claude Code: `/council-dial:council-dial`). It's an independent project, not made or endorsed by Anthropic.
 

@@ -1,6 +1,6 @@
 # Council Dial
 
-Council Dial is a Claude Code plugin that runs a review council of Claude subagents in the configuration you choose (specialised or generalist reviewers; judged, pooled or consensus combining; optional debate, sequential and single-reviewer baseline runs) and logs each run's type and results in your project, so you can compare council types over time. The plugin lives in [plugin/](plugin/); its README, [plugin/README.md](plugin/README.md), describes what it does, what it reads and writes, and how to try it.
+Council Dial is a Claude Code plugin. When you want code, docs or a plan reviewed, Council Dial has Claude run a review council of subagents set up the way you choose: specialised or generalist reviewers, a judge, a pooled list or a majority consensus to combine their findings, and optional debate, sequential and single-reviewer baseline runs. Claude tells you how many subagents a run will use and waits for your yes. Each run's type and results go into a log in your project, so you can compare council types over time. The plugin lives in [plugin/](plugin/); its README, [plugin/README.md](plugin/README.md), describes what it does, what it reads and writes, and how to try it.
 
 ## Install
 
