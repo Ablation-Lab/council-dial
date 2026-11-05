@@ -1,0 +1,23 @@
+{
+  "name": "council-dial",
+  "displayName": "Council Dial",
+  "version": "1.0.0",
+  "description": "Runs a review council of Claude subagents the way you choose, and logs which way it ran: specialised or generalist reviewers; judged, pooled or consensus combining; optional debate and sequential rounds; and an optional single-reviewer baseline to compare against. A local script turns your choices into the reviewer and judge briefs, then records each run's type and results (findings, confirmed, dismissed, fixes that later failed) in a review log in your project, and compares the types over time. Runs in Claude Code with Node.js; the script writes only the review log and makes no network requests.",
+  "author": {
+    "name": "Ablation Lab"
+  },
+  "homepage": "https://github.com/Ablation-Lab/council-dial",
+  "repository": "https://github.com/Ablation-Lab/council-dial",
+  "license": "MIT",
+  "icon": "./.claude-plugin/icon.png",
+  "documentationUrl": "https://github.com/Ablation-Lab/council-dial/blob/main/plugin/README.md",
+  "supportUrl": "https://github.com/Ablation-Lab/council-dial/issues",
+  "privacyPolicyUrl": "https://github.com/Ablation-Lab/council-dial/blob/main/plugin/README.md#privacy",
+  "keywords": [
+    "review",
+    "code-review",
+    "council",
+    "subagents",
+    "research"
+  ]
+}
