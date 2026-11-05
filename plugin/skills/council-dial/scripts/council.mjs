@@ -69,7 +69,7 @@ export function clean(text, max = 300) {
   return chars.length > max ? chars.slice(0, max - 1).join('') + '…' : t;
 }
 // For the Markdown log: no table breaks, HTML, links or images.
-const cell = s => clean(String(s), 120).replace(/\|/g, '/').replace(/</g, '&lt;').replace(/\[/g, '\\[').replace(/!/g, '&#33;').replace(/`/g, "'");
+const cell = s => clean(String(s), 120).replace(/\|/g, '/').replace(/</g, '&lt;').replace(/\[/g, '\\[').replace(/!/g, '&#33;').replace(/`/g, "'").replace(/:\/\//g, '&#58;//').replace(/\bwww\./gi, 'www&#46;');
 
 const SHELL_CHARS = /[$`'"\\;&|<>*?%!{}\0\p{Pi}\p{Pf}]/u;
 const RESERVED = /^(con|prn|aux|nul|com\d|lpt\d)(\..*)?$/i;
@@ -88,6 +88,7 @@ export function logPaths(project, dir) {
   while (!fs.existsSync(d)) d = path.dirname(d);
   const real = (fs.realpathSync.native || fs.realpathSync);
   if (d !== path.resolve(project) && !inside(real(project), real(d))) throw new Error('--log-dir leads outside the project through a link');
+  if (d !== abs && !fs.statSync(d).isDirectory()) throw new Error(`${path.relative(project, d) || d} is a file, so --log-dir ${r} can't be created inside it; choose another --log-dir`);
   if (fs.existsSync(abs) && !fs.lstatSync(abs).isDirectory()) throw new Error(`${r} exists but isn't a folder; choose another --log-dir`);
   for (const f of [abs, path.join(abs, 'review-log.jsonl'), path.join(abs, 'review-log.md')]) {
     let st; try { st = fs.lstatSync(f); } catch (e) { if (e.code !== 'ENOENT') throw e; continue; }
@@ -141,6 +142,15 @@ function parseRoles(raw) {
   return roles;
 }
 
+// The type's name, always rebuilt from the type itself (never read back from the log), so every run of
+// the same council gets the same name. Custom roles are marked, in lower case and sorted, so they
+// aren't compared as if they were the default council, and role order or case doesn't split a type.
+export function labelOf(type) {
+  const roles = Array.isArray(type.roles) ? type.roles.map(r => r.toLowerCase()).sort() : null;
+  const custom = type.reviewers === 'specialised' && roles && roles.join('|') !== [...DEFAULT_ROLES].sort().join('|');
+  return `${type.reviewers}-${type.n}${custom ? ` [${roles.join(', ')}]` : ''}/${type.combine}${type.debate ? '+debate' : ''}${type.sequential ? '+sequential' : ''}`;
+}
+
 export function buildPlan(o, target, now = new Date(), usedIds = new Set()) {
   const t = clean(target, 600);
   if (!t) throw new Error('say what to review on stdin (for example: "the diff of branch fix-parser in this repo: src/parser.mjs and its tests")');
@@ -148,12 +158,13 @@ export function buildPlan(o, target, now = new Date(), usedIds = new Set()) {
   if (roles && o.n != null && o.n !== roles.length) throw new Error(`--n is ${o.n} but there are ${roles.length} roles; leave --n out for specialised reviewers`);
   const n = roles ? roles.length : (o.n ?? 3);
   if (n < 2 && (o.debate || o.combine === 'consensus')) throw new Error('debate and consensus need at least 2 reviewers');
-  const customRoles = roles && roles.join('|').toLowerCase() !== DEFAULT_ROLES.join('|');
-  // Custom roles are marked in the type, so they aren't compared as if they were the default council.
-  const label = `${o.reviewers}-${n}${customRoles ? ` [${roles.join(', ')}]` : ''}/${o.combine}${o.debate ? '+debate' : ''}${o.sequential ? '+sequential' : ''}`;
+  const label = labelOf({ reviewers: o.reviewers, n, roles, combine: o.combine, debate: o.debate, sequential: o.sequential });
   const day = `${now.getUTCFullYear()}${String(now.getUTCMonth() + 1).padStart(2, '0')}${String(now.getUTCDate()).padStart(2, '0')}`;
-  let runId;
-  do runId = `${day}-${crypto.randomBytes(2).toString('hex')}`; while (usedIds.has(runId));
+  let runId = null;
+  for (let tries = 0; tries < 200 && runId == null; tries++) { const id = `${day}-${crypto.randomBytes(2).toString('hex')}`; if (!usedIds.has(id)) runId = id; }
+  // A log crowded with today's ids (planted, or very busy): look for a free one in order, or stop.
+  for (let i = 0; i < 0x10000 && runId == null; i++) { const id = `${day}-${i.toString(16).padStart(4, '0')}`; if (!usedIds.has(id)) runId = id; }
+  if (runId == null) throw new Error('every run id for today is already in the review log; try again tomorrow or use another --log-dir');
   const reviewers = Array.from({ length: n }, (_, i) => ({ label: roles ? `reviewer: ${roles[i]}` : `reviewer ${i + 1}`, role: roles ? roles[i] : 'generalist', brief: reviewerBrief(t, roles ? roles[i] : null, i + 1, n, o.sequential) }));
   const steps = [{ step: 'review', how: o.sequential ? 'one at a time, in order; give each reviewer the earlier reports after its brief, each in a <report from="..."> block' : 'all at once, independently; no reviewer sees another\'s report', agents: reviewers }];
   if (o.debate) steps.push({ step: 'debate', how: 'one round: give each debate agent every review report after this brief, each in a <report from="..."> block, with the one from its own seat marked YOURS; start them all at once', agents: reviewers.map(r => ({ label: `${r.label} (debate)`, role: r.role, brief: debateBrief(t, r.role, r.label, n) })) });
@@ -168,7 +179,7 @@ export function buildPlan(o, target, now = new Date(), usedIds = new Set()) {
     runId, version: VERSION, label, target: t,
     type: { reviewers: o.reviewers, n, roles, combine: o.combine, debate: o.debate, sequential: o.sequential, baseline: o.baseline },
     agentCount, steps, warnings,
-    resultsTemplate: { findingsPerReviewer: reviewers.map(() => 0), findingsCombined: 0, confirmed: 0, overstated: 0, dismissed: 0, verified: true, severity: { high: 0, med: 0, low: 0 }, baseline: o.baseline ? { findings: 0, confirmed: 0, alsoFoundByCouncil: 0 } : null, wallMinutes: 0, notes: '' },
+    resultsTemplate: { findingsPerReviewer: reviewers.map(() => 0), findingsCombined: 0, confirmed: 0, overstated: 0, dismissed: 0, verified: null, severity: { high: 0, med: 0, low: 0 }, baseline: o.baseline ? { findings: 0, confirmed: 0, alsoFoundByCouncil: 0 } : null, wallMinutes: 0, notes: '' },
   };
 }
 
@@ -176,7 +187,9 @@ export function buildPlan(o, target, now = new Date(), usedIds = new Set()) {
 const int = (v, what, max = 100000) => { if (v == null) return 0; if (!Number.isInteger(v) || v < 0 || v > max) throw new Error(`${what} must be a whole number from 0 to ${max}`); return v; };
 const num = (v, what) => { if (v == null) return 0; if (typeof v !== 'number' || !Number.isFinite(v) || v < 0 || v > 100000) throw new Error(`${what} must be a number of 0 or more`); return Math.round(v * 10) / 10; };
 
-export function checkResults(r) {
+// strict (when writing): the counts must add up. Reading an existing log checks only that the values
+// are well formed, so rows written by an earlier version aren't lost.
+export function checkResults(r, strict = true) {
   if (!r || typeof r !== 'object' || Array.isArray(r)) throw new Error('give the results as a JSON object on stdin (the plan\'s resultsTemplate shows the fields)');
   if (r.findingsPerReviewer != null && !Array.isArray(r.findingsPerReviewer)) throw new Error('findingsPerReviewer must be a list of numbers');
   const per = (r.findingsPerReviewer || []).map((x, i) => int(x, `findingsPerReviewer[${i}]`));
@@ -186,10 +199,15 @@ export function checkResults(r) {
     baseline: r.baseline && typeof r.baseline === 'object' ? { findings: int(r.baseline.findings, 'baseline.findings'), confirmed: int(r.baseline.confirmed, 'baseline.confirmed'), alsoFoundByCouncil: int(r.baseline.alsoFoundByCouncil, 'baseline.alsoFoundByCouncil') } : null,
     wallMinutes: num(r.wallMinutes, 'wallMinutes'), notes: clean(r.notes, 400),
   };
-  if (r.verified != null && typeof r.verified !== 'boolean') throw new Error('verified must be true or false');
-  // Unverified unless the counts were checked: explicit, or all three left at 0 for a run with findings.
-  out.verified = r.verified ?? !(out.findingsCombined > 0 && out.confirmed + out.overstated + out.dismissed === 0);
-  if (out.confirmed + out.overstated + out.dismissed > out.findingsCombined) throw new Error('confirmed + overstated + dismissed is more than findingsCombined');
+  if (r.verified != null && typeof r.verified !== 'boolean') throw new Error('verified must be true, false or left out');
+  const checked = out.confirmed + out.overstated + out.dismissed;
+  // verified: true is accepted only when every combined finding was checked (confirmed + overstated +
+  // dismissed add up to findingsCombined). Left out, a run with findings but none of the three counted
+  // is unverified.
+  if (strict && r.verified === true && checked !== out.findingsCombined) throw new Error('verified is true, but confirmed + overstated + dismissed don\'t add up to findingsCombined; check every finding, or set verified to false');
+  out.verified = r.verified ?? !(out.findingsCombined > 0 && checked === 0);
+  if (!strict) return out;
+  if (checked > out.findingsCombined) throw new Error('confirmed + overstated + dismissed is more than findingsCombined');
   if (out.severity.high + out.severity.med + out.severity.low > out.findingsCombined) throw new Error('the severity counts add up to more than findingsCombined');
   if (out.baseline && (out.baseline.confirmed > out.baseline.findings || out.baseline.alsoFoundByCouncil > out.baseline.findings)) throw new Error('baseline confirmed and alsoFoundByCouncil can\'t be more than baseline findings');
   return out;
@@ -216,8 +234,12 @@ export function readLog(file) {
       if (!r || typeof r !== 'object' || !RUN_ID.test(r.runId) || typeof r.time !== 'string' || !ISO.test(r.time)) throw new Error('bad row');
       if (r.kind === 'planned') {
         if (!r.type || typeof r.type !== 'object' || !REVIEWERS.includes(r.type.reviewers) || !COMBINE.includes(r.type.combine) || !Number.isInteger(r.type.n) || r.type.n < 1 || r.type.n > 9) throw new Error('bad type');
-        rows.push({ kind: 'planned', runId: r.runId, time: r.time, version: Number.isInteger(r.version) ? r.version : 1, label: clean(r.label, 160), target: clean(r.target, 300), type: { reviewers: r.type.reviewers, n: r.type.n, combine: r.type.combine, debate: !!r.type.debate, sequential: !!r.type.sequential, baseline: !!r.type.baseline, roles: Array.isArray(r.type.roles) ? r.type.roles.map(x => clean(x, 60)) : null } });
-      } else if (r.kind === 'results') rows.push({ kind: 'results', runId: r.runId, time: r.time, results: checkResults(r.results) });
+        const roles = r.type.reviewers === 'specialised' && Array.isArray(r.type.roles) && r.type.roles.length === r.type.n && r.type.roles.every(x => typeof x === 'string') ? r.type.roles.map(x => clean(x, 60).replace(new RegExp(SHELL_CHARS.source, 'gu'), '')) : (r.type.reviewers === 'specialised' ? DEFAULT_ROLES : null);
+        const type = { reviewers: r.type.reviewers, n: r.type.n, combine: r.type.combine, debate: !!r.type.debate, sequential: !!r.type.sequential, baseline: !!r.type.baseline, roles };
+        // The label is rebuilt from the type, never taken from the line, so a planted or cut label
+        // can't rename a run or merge two types.
+        rows.push({ kind: 'planned', runId: r.runId, time: r.time, version: Number.isInteger(r.version) ? r.version : 1, label: labelOf(type), target: clean(r.target, 300), type });
+      } else if (r.kind === 'results') rows.push({ kind: 'results', runId: r.runId, time: r.time, results: checkResults(r.results, false) });
       else if (r.kind === 'update') rows.push({ kind: 'update', runId: r.runId, time: r.time, update: checkUpdate(r.update) });
       else throw new Error('bad kind');
     } catch { skipped++; }
