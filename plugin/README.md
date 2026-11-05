@@ -54,7 +54,7 @@ To try it:
 2. Say: `How do the council types compare in my review log?` You should see a table with three types: `specialised-3/judged` (3 runs), `generalist-3/pooled` (2 runs) and `specialised-3/judged+debate` (1 run), with the judged councils confirming a larger share of their findings than the pooled ones (in this made-up data; it isn't a real result).
 3. Say: `Run a quick review council on target/slugify.mjs`. Claude says it will start three generalist reviewers (three subagents) and asks first; then it pools their reports and gives the findings. Compare them with `expected-findings.md` in the repository. The run is added to `reviews/review-log.md`.
 
-**Developer note.** Council Dial has not been checked with Seaready yet. (This note is updated once it has.)
+**Developer note.** Seaready, our plugin submission checker, was built first. Council Dial was then checked with it before submission: its local checks found no failures after one false alarm was recorded (a pattern for Windows short names that looked like a home-folder path; it is listed with its reason in .plugin-check-allow.json and shown as allowed in the report), and one warning because the repository had no GitHub remote yet. Its online name and overlap search found no plugin with the same name and several review-council plugins and skills, now described under How it compares. Council Dial also went through a review council (three reviewers and a judge) and two rounds of fixes, each rechecked by a fresh reviewer; the minor issues left after that are listed under Limits. It's our own pre-check, not an Anthropic one; the directory's validation and Anthropic's reviewers make the actual decision.
 
 ## What it runs, reads and writes
 
@@ -91,7 +91,10 @@ Council Dial has no server, account or telemetry and sends nothing anywhere itse
 
 ## How it compares
 
-(Filled in after the name and overlap search.)
+- **Anthropic's code-review plugin and `/code-review`** (including ultra) review a pull request with several agents in a fixed setup. Council Dial is for comparing council setups: you choose the type, and every run's type and results go in a log you can compare.
+- **Fixed review councils** such as claude-code-review-council (yeameen), agent-review-panel (wan-huiyan), review-council (deployhq), pantheon (the-cybersapien) and council-review skills run one council design, some with other vendors' models. Council Dial runs only Claude subagents, lets you choose among specialised or generalist reviewers, judged, pooled or consensus combining, debate, sequential and baseline, and keeps the briefs fixed so runs compare fairly.
+- **reviewteam** (jcr211) keeps a findings ledger and calibrates each critic. Council Dial compares whole council types, including whether their fixes held up on recheck.
+- **Debate and decision councils** such as claude-council (amgadelgamal), council (tsenart), debate (strml), claude-consensus, configurable-council (shinytoyrobots), war-room and advisory councils weigh opinions or decisions. Council Dial is for reviews, with findings checked and counted.
 
 ## Limits
 
@@ -103,7 +106,10 @@ Council Dial has no server, account or telemetry and sends nothing anywhere itse
 - If two runs write the log at the same moment, `review-log.md` can miss the other's row until the next write (the `.jsonl` log keeps both).
 - A run with a baseline is grouped with runs of the same council type without one; the baseline doesn't change the council. Brief versions aren't separated in the comparison yet (there is only version 1).
 - Recheck results add up per run and can't be corrected, only added to; `newFindings` is recorded but not compared.
-- A review log that came with a project you cloned is read like your own; lines that don't pass the script's checks are skipped and counted.
+- A review log that came with a project you cloned is read like your own; lines that don't pass the script's checks are skipped and counted. Rows written by hand or by an older version are read with their values checked but not whether they add up, so impossible counts in such a row can skew the shares.
+- A run logged with `verified` left out, whose confirmed, overstated and dismissed counts are filled in but don't add up to the combined findings, still counts as verified.
+- Custom roles are compared without regard to their order or capitals, including for sequential councils, where the order of reviewers does change the run; role names appear in lower case in the type.
+- Email addresses and some bare web addresses in a target may still show as links in `review-log.md` on GitHub.
 
 ## Troubleshooting
 
