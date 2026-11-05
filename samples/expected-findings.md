@@ -1,6 +1,6 @@
 # Expected findings for samples/target
 
-Problems planted on purpose in `target/slugify.mjs`, so you can see what each council type finds and misses. A good council should report most of them; a single reviewer usually misses some.
+Problems planted on purpose in `target/slugify.mjs`, so you can see what each council type finds and misses. Compare what each council type reports with this list. Keep this file out of the folder you ask the council to review.
 
 | # | Where | Problem | Kind |
 |---|---|---|---|

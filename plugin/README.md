@@ -16,7 +16,7 @@ On older versions, add the marketplace first with `/plugin marketplace add Ablat
 
 ## How it works
 
-1. **Dial in the type.** Say what to review and how, for example "run a specialised council with a judge and a debate round on this branch". If you don't say how, Claude suggests Standard (three specialised reviewers and a judge), Quick (three generalists, pooled) or Thorough (Standard plus debate and a baseline), and says how many subagents each uses.
+1. **Dial in the type.** Say what to review and how, for example "run a specialised council with a judge and a debate round on this branch". If you don't say how, Claude suggests Standard (three specialised reviewers and a judge), Quick (three generalists, pooled) or Thorough (Standard plus debate and a baseline). Either way it tells you how many subagents the run uses and waits for your yes before it starts.
 2. **Plan.** A local script turns your choices into the exact briefs for each reviewer, the debate round and the judge, and logs the run's type straight away.
 3. **Run.** Claude starts the subagents step by step: reviewers in parallel (or one at a time, each seeing the earlier reports), then the debate round, then the judge, or Claude merges the reports itself for pooled and consensus. The baseline reviewer works alone and never sees the council's reports.
 4. **Report.** You get the council's findings, most serious first, with fixes, and what the baseline found that the council didn't (and the reverse).
@@ -28,7 +28,7 @@ The types:
 | Dial | Choices |
 |---|---|
 | Reviewers | **specialised** (each covers one area: by default correctness, security and privacy, docs and policy accuracy; or areas you name) or **generalist** (all review everything; 1 to 9 of them) |
-| Combine | **judged** (a fresh judge checks each finding and merges duplicates), **pooled** (every finding, duplicates merged, nothing verified) or **consensus** (only findings most reviewers raised; the rest listed as minority findings) |
+| Combine | **judged** (a fresh judge merges duplicates and checks each finding), **pooled** (every finding, duplicates merged, nothing verified) or **consensus** (only findings a majority of the reviewers raised, such as 2 of 3 or 3 of 4; the rest listed as minority findings) |
 | Extras | **debate** (one round where each reviewer answers the others' findings), **sequential** (reviewers go one at a time and look for what the earlier ones missed), **baseline** (one extra reviewer alone, for comparison) |
 
 ## Example prompts
@@ -36,8 +36,8 @@ The types:
 ```
 Run a standard review council on the diff of this branch
 Review src/parser.mjs with three generalist reviewers, pooled, plus a single-reviewer baseline
-Run a thorough council on samples/target/slugify.mjs
-Log that the recheck for run 20261105-3fa9 found 2 of the 7 fixes didn't hold
+Run a thorough council on target/slugify.mjs
+Log that the recheck for my last council run found 2 of the 7 fixes didn't hold
 How do the council types compare in my review log?
 ```
 
@@ -50,28 +50,29 @@ There's no account to set up: Council Dial runs in Claude Code and keeps its log
 
 To try it:
 
-1. Copy the contents of `samples/` into an empty folder and open that folder in Claude Code.
-2. Say: `How do the council types compare in my review log?` You should see a table with three types: `specialised-3/judged` (3 runs), `generalist-3/pooled` (2 runs) and `specialised-3/judged+debate` (1 run), with the judged councils confirming a larger share of their findings than the pooled ones.
-3. Say: `Run a quick review council on target/slugify.mjs`. Claude starts three generalist reviewers (three subagents), pools their reports, and reports the findings; compare them with `expected-findings.md`. The run is added to `reviews/review-log.md`.
+1. Copy `samples/target/` and `samples/reviews/` (not `expected-findings.md`, which would give the answers away) into an empty folder and open that folder in Claude Code.
+2. Say: `How do the council types compare in my review log?` You should see a table with three types: `specialised-3/judged` (3 runs), `generalist-3/pooled` (2 runs) and `specialised-3/judged+debate` (1 run), with the judged councils confirming a larger share of their findings than the pooled ones (in this made-up data; it isn't a real result).
+3. Say: `Run a quick review council on target/slugify.mjs`. Claude says it will start three generalist reviewers (three subagents) and asks first; then it pools their reports and gives the findings. Compare them with `expected-findings.md` in the repository. The run is added to `reviews/review-log.md`.
 
 **Developer note.** Council Dial has not been checked with Seaready yet. (This note is updated once it has.)
 
 ## What it runs, reads and writes
 
 - **What it runs:** `node <skill folder>/scripts/council.mjs <command>`, with the target description or results passed on standard input. Claude Code asks before each run unless your permission settings already allow it. The script starts no other programs.
-- **Subagents:** Claude starts the reviewer, debate and judge subagents with Claude Code's Agent tool, as the plan says. They read the material you asked to have reviewed. Each one uses tokens from your plan like any other Claude work; a Thorough run uses eight.
+- **Subagents:** Claude starts the reviewer, debate, baseline and judge subagents with Claude Code's Agent tool, as the plan says. They are ordinary subagents: they can use the tools this session allows, under your permission settings, so Claude Code still asks before anything that needs your OK. Their briefs tell them to review only, to write scratch files only in a temporary folder, and not to run the material's code unless you allowed it. Each one uses tokens from your plan like any other Claude work: a run takes from 3 agents (Quick) to 8 (Thorough) and up to 20 for the largest custom council; every reviewer reads the material, and debate agents and the judge also read every report, so a council costs several times one review.
 - **What the script reads:** only the review log.
 - **What the script writes:** only the review log, in `reviews/` in your project (or a folder inside the project you choose): `review-log.jsonl`, an append-only record of each run's type, target description, counts and recheck results, and `review-log.md`, a readable summary rebuilt from it after every write. It won't write through a link or outside the project.
 - **Network:** the script makes none. The subagents are Claude, so the material they review reaches Anthropic the way anything in your conversation does.
 
 ## Where it works
 
-- **Claude Code**, with Node.js 18 or later. Tested on Windows 11; the script uses only Node's standard library, so macOS and Linux should work but weren't tested.
-- **Cowork and Claude chat (claude.ai):** not tested.
+- **Claude Code**, with Node.js 18 or later and subagents. Tested on Windows 11; the script uses only Node's standard library, so macOS and Linux should work but weren't tested.
+- **Claude chat (claude.ai):** not supported (it needs subagents and Node).
+- **Cowork:** not tested.
 
 ## Privacy
 
-Council Dial has no server, account or telemetry and sends nothing anywhere itself. The review log in your project holds, for each run: the date, the type, a one-line description of what was reviewed, the counts, and a one-line note. It doesn't hold the reviewers' reports or the material reviewed. You can read, edit or delete it; if your project is public, the log is committed with it unless you add `reviews/` to `.gitignore`. What the subagents review reaches Anthropic the way anything in your conversation does.
+Council Dial has no server, account or telemetry and sends nothing anywhere itself. The review log in your project holds, for each run: the date and time it was planned, logged and rechecked; the type (including any custom role names) and brief version; a description of what was reviewed (up to 600 characters); the counts (findings per reviewer, combined, confirmed, overstated, dismissed, by severity, the baseline's, fixes and regressions after rechecks); the time taken; and short notes. It doesn't hold the reviewers' reports or the material reviewed. You can read, edit or delete it. If your project is public, the log is committed with it unless you add `reviews/` to `.gitignore`; do that for security reviews, because counts of HIGH findings and failed fixes per target hint at where problems were. What the subagents review reaches Anthropic the way anything in your conversation does.
 
 ## How it's built
 
@@ -82,10 +83,10 @@ Council Dial has no server, account or telemetry and sends nothing anywhere itse
 
 ## Design decisions
 
-- **The type is logged before the run.** A run that fails halfway still shows up, so the log doesn't quietly favour the types that finished.
+- **The type is logged before the run.** A run that fails halfway still shows up (the comparison counts planned runs that were never logged), so the log doesn't quietly favour the types that finished.
 - **Same briefs every time.** Comparisons mean something only if the reviewers were asked the same way.
 - **A baseline is optional but cheap.** One extra reviewer working alone is the simplest test of whether a council is worth its cost.
-- **Confirmed means checked.** Without a judge, Claude checks each finding before counting it as confirmed, or records the run as unverified, so pooled and consensus runs aren't flattered.
+- **Confirmed means checked.** Without a judge, Claude checks each finding before counting it as confirmed, or records the run as unverified, and unverified runs are left out of the confirmed and dismissed shares, so pooled and consensus runs are neither flattered nor dragged down.
 - **Fixes are followed up.** Fixes that fail their recheck, and new problems they cause, are part of a council's cost, so the log keeps them.
 
 ## How it compares
@@ -99,6 +100,10 @@ Council Dial has no server, account or telemetry and sends nothing anywhere itse
 - The time recorded is wall time in the session, which depends on load as well as the type.
 - Debate is one round, and sequential runs take longer by design.
 - Subagents can fail or stop early; the run is logged with what came back.
+- If two runs write the log at the same moment, `review-log.md` can miss the other's row until the next write (the `.jsonl` log keeps both).
+- A run with a baseline is grouped with runs of the same council type without one; the baseline doesn't change the council. Brief versions aren't separated in the comparison yet (there is only version 1).
+- Recheck results add up per run and can't be corrected, only added to; `newFindings` is recorded but not compared.
+- A review log that came with a project you cloned is read like your own; lines that don't pass the script's checks are skipped and counted.
 
 ## Troubleshooting
 
