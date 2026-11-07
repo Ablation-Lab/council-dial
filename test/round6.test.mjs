@@ -273,7 +273,9 @@ test('docs: the README says what keeps the answer key from the reviewers, and bo
     assert.match(t, /can read any file/, f);
     assert.ok(t.includes(PRICING_URL), f);
     assert.match(t, /estimate/, f);
+    assert.match(t, /kept share isn't comparable across combine methods.*scores higher by construction.*answer key/, f);
   }
+  assert.match(fs.readFileSync(path.join(ROOT, 'plugin/skills/council-dial/SKILL.md'), 'utf8'), /different combine methods, say that their kept shares aren't comparable/);
   assert.ok(!/can't read it/.test(fs.readFileSync(path.join(ROOT, 'sample-answers', 'expected-findings.md'), 'utf8')));
   assert.match(fs.readFileSync(path.join(ROOT, 'plugin/skills/council-dial/SKILL.md'), 'utf8'), /council\.mjs" estimate/);
 });

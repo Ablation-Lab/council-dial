@@ -128,6 +128,7 @@ Council Dial has no server, account or telemetry and sends nothing anywhere itse
 
 - The counts come from Claude's reading of the reports, and "kept" is only as good as the judge or Claude's own check.
 - Comparisons need many runs on similar material; a handful of runs says little, and Claude says so.
+- The kept share isn't comparable across combine methods. Combined findings mean different things for each: a judged run counts the judge's merged list, including what it dismissed; a pooled run counts every finding; a consensus run counts only findings a majority raised, so it filters before counting and scores higher by construction. Compare types within one combine method, or, to compare across methods, score each run against an answer key where one exists, such as the sample's: planted bugs caught and false alarms.
 - Wall time depends on load as well as the type, and the critical path depends on the durations Claude Code reports; the two are kept apart, but a type may have one and not the other (see [Models, tokens and time](#models-tokens-and-time)).
 - The token estimate is the average of earlier runs of the same type, whatever material they reviewed: Council Dial doesn't record the material's size, so it can't scale the estimate to it.
 - The same model can appear under two type names: `@opus` when a run asked for the alias, and `@claude-opus-5-5` when the subagents inherited the session's model. Such runs are compared, and estimated, apart.
