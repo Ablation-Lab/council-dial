@@ -76,8 +76,8 @@ test('each agent\'s model, tokens, tool uses and time are logged; tokens per run
   assert.equal(g.tokensPerRun, 220000);
   assert.equal(g.appealTokensPerRun, 30000);
   const md = fs.readFileSync(path.join(p, 'reviews', 'review-log.md'), 'utf8');
-  assert.match(md, new RegExp(`\\| ${a.runId} \\|.*\\| 5 \\| 220000 \\|`));
-  assert.match(md, /\| 5 \| 220000 \(30000\) \|/);
+  assert.match(md, new RegExp(`\\| ${a.runId} \\|.*\\| wall 5, critical path 2\\.8 \\| 220000 \\|`));
+  assert.match(md, /\| wall 5 \(1 run\), critical path 2\.8 \(1 run\) \| 220000 \(30000\) \|/);
   // A run with a gap in the reported tokens shows what was reported, and isn't averaged in.
   const b = run(p, [...STD, '--main-model', 'claude-opus-5-5'], T);
   run(p, ['log', '--run', b.runId], JSON.stringify({ ...base, agents: agents.map((x, i) => (i === 0 ? { ...x, tokens: null } : x)) }));
@@ -102,7 +102,7 @@ test('bad agent entries are refused', () => {
   assert.equal(checkResults({ findingsCombined: 0, agents: [{ label: 'judge', step: 'combine' }] }).agents[0].model, 'inherit');
 });
 
-test('old rows have no models; a planted model value never reaches the type name', () => {
+test('old rows have no models; a planted model value that isn\'t a model id never reaches the type name (round6 tests one that is)', () => {
   const p = tmp();
   fs.mkdirSync(path.join(p, 'reviews'));
   fs.writeFileSync(jsonl(p), [

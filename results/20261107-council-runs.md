@@ -17,7 +17,7 @@ Figures that couldn't be captured are marked **missing**, never estimated.
 
 | | Run 1: `20261107-f675` | Run 2: `20261107-2f23` |
 |---|---|---|
-| Planned (UTC) | 2026-11-07 19:02:56 | 2026-11-07 19:52:24 |
+| Planned (UTC) | 2026-11-07 19:02:56 | 2026-11-07 19:52:25 |
 | Type | `specialised-3/judged` | `specialised-3/judged+appeal @claude-opus-5-5` |
 | Roles | correctness; security and privacy; docs and policy accuracy (the defaults) | the same |
 | Combine | judge (final say) | judge, then appeal |
@@ -116,7 +116,9 @@ The tokens, tool uses and times are what Claude Code reported in each subagent's
 
 ## 4. Beyond the answer key
 
-### Real findings that aren't planted
+### Kept findings that aren't planted
+
+"Kept" means the judge marked them REAL or OVERSTATED (a real problem, rated too high). Run 1: 4, all REAL. Run 2: 5, of which 2 REAL and 3 OVERSTATED.
 
 **Run 1 (4):**
 - `20261107-f675/M8`: the `-N` suffix can push a slug past `maxLength`. REAL, LOW.
@@ -134,7 +136,7 @@ The tokens, tool uses and times are what Claude Code reported in each subagent's
 ### False positives
 
 - **Run 1:** none kept. The only finding the judge dismissed was a planted bug. One reviewer repro was wrong, and the judge corrected it: "Ünïcödé" gives `n-c-d-`, not `n-c-d` (correctness reviewer, finding 2, in `20261107-f675/M2`).
-- **Run 2:** one, `20261107-2f23/M12`, from the security reviewer's finding 6 at low confidence. The judge dismissed it and the appeal agreed. Its claim that the README doesn't say where the files are stored is contradicted by README line 7.
+- **Run 2:** one, `20261107-2f23/M12`, from the security reviewer's finding 6 (LOW, at low confidence). The judge dismissed it and the appeal agreed. Its claim that the README doesn't say where the files are stored is contradicted by README line 7.
 
 ### Everything the judge dismissed
 
@@ -156,15 +158,19 @@ The tokens, tool uses and times are what Claude Code reported in each subagent's
 | Reviewer findings | 23 (10, 5, 8) | 24 (10, 7, 7) |
 | Merged: REAL / OVERSTATED / NOT REAL | 13: 10 / 2 / 1 | 13: 7 / 5 / 1 |
 | Planted bugs raised by reviewers | 9 of 9 | 9 of 9 |
-| Planted bugs kept after judging | **8 of 9** | **9 of 9** |
+| Planted bugs kept after judging | **8 of 9**\* | **9 of 9** |
 | Planted bugs merged together | none | 2 pairs |
 | Dismissed | planted bug #7 (`20261107-f675/M12`) | one unplanted false positive (`20261107-2f23/M12`) |
-| Real findings beyond the answer key | 4 | 5 |
+| Kept findings beyond the answer key (REAL / OVERSTATED) | 4 (4 / 0) | 5 (2 / 3) |
 | Judge | 57,350 tokens, 3 tool uses, 92.0 s | 61,922 tokens, 2 tool uses, 128.6 s |
 | Total tokens | 191,887 (4 agents) | 239,891 (5 agents) |
 | Time | 3.9 min wall time | 3.2 min critical path (wall time **missing**) |
 
+\* Planted bug #7, as the answer key now words it, depends on README text that run 1's material didn't have: run 1's README didn't say the path comes from user input (section 6, change 1), and run 1's judge dismissed the finding for that reason. So counting it as a miss for run 1 is debatable. On the other 8 planted bugs, both runs kept 8 of 8.
+
 The two times measure different things and can't be compared.
+
+**The shares in the review log.** Council Dial 1.2.0's `review-log.md` showed a "confirmed" share that counted only REAL findings: 77% for run 1 (10 of 13) and 54% for run 2 (7 of 13). That left OVERSTATED findings out, so the run that kept 9 of 9 planted bugs looked worse. From 1.3.0 the log shows the kept share instead (REAL or OVERSTATED): 92% (12 of 13) for both runs, with the judge's severity cuts shown separately (2 of 12 kept findings for run 1, 5 of 12 for run 2).
 
 ### What the appeal agent cost, next to one reviewer
 
@@ -207,6 +213,7 @@ Unchanged: the reviewer briefs (apart from the description line), the roles, the
 - The model each subagent actually ran on (both runs). Claude Code doesn't report it to the main session.
 - Input, output and cached tokens, and cost per agent (both runs).
 - Run 2's wall time. 3.2 minutes is the agents' critical path.
+- The effort level (both runs): it wasn't recorded for these runs. The session's saved level was high and every seat inherited the session's model, so the seats probably ran at high (inferred, not recorded).
 - Start and finish times for each agent (both runs). Only durations were reported.
 - Run 1's environment variables at run time. They were checked about 45 minutes later, and none were set.
 - Council Dial's version in each run's log row (both runs). `setup` infers it: 1.0.0 for run 1, 1.2.0 for run 2.

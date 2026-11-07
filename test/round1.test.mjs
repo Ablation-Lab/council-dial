@@ -42,7 +42,7 @@ test('J2: damaged or planted rows are skipped and counted, never crash or reach 
   const md = fs.readFileSync(path.join(p, 'reviews/review-log.md'), 'utf8');
   assert.ok(!/Injected heading|<img|<script/.test(md));
   assert.ok(!JSON.stringify(run(p, ['list'])).includes('IMPORTANT NOTE'));
-  assert.ok(compare(runsFrom(readLog(jsonl(p)))).every(g => g.confirmedPercent == null || g.confirmedPercent <= 100));
+  assert.ok(compare(runsFrom(readLog(jsonl(p)))).every(g => g.keptPercent == null || g.keptPercent <= 100));
 });
 
 test('J3: results and rechecks that don\'t add up are refused', () => {
@@ -93,7 +93,7 @@ test('J6: compare leaves unverified runs out of the shares and counts unfinished
   run(p, ['log', '--run', b.runId], '{"findingsCombined":10,"confirmed":5,"dismissed":5}');
   run(p, ['plan', '--reviewers', 'generalist', '--combine', 'pooled'], T);
   const g = run(p, ['compare']).byType[0];
-  assert.equal(g.confirmedPercent, 50);
+  assert.equal(g.keptPercent, 50);
   assert.equal(g.unverifiedRuns, 1);
   assert.equal(g.unfinishedRuns, 1);
   assert.equal(g.runs, 2);

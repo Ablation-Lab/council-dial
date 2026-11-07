@@ -1,6 +1,6 @@
 # Expected findings for samples/target
 
-Problems planted on purpose in `samples/target/slugify.mjs`, so you can see what each council type finds and misses. Compare what each council type reports with this list. This file is kept outside `samples/` so a council pointed at the sample can't read it; the sample's own README and comments don't say it has planted problems.
+Problems planted on purpose in `samples/target/slugify.mjs`, so you can see what each council type finds and misses. Compare what each council type reports with this list. This file is kept outside `samples/` so it isn't copied along with the sample. That alone doesn't hide it: a council's reviewers can read any file the session's tools and permission settings allow. What keeps it from them is running the council on a copy of `samples/` in a folder that doesn't contain this file, as the README's "Try it" says. The sample's own README and comments don't say it has planted problems.
 
 | # | Where | Problem | Kind |
 |---|---|---|---|

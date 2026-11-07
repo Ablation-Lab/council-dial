@@ -17,7 +17,7 @@ const jsonl = p => path.join(p, 'reviews', 'review-log.jsonl');
 const T = 'the diff of branch fix-parser';
 const filesIn = d => fs.readdirSync(d, { withFileTypes: true }).flatMap(e => (e.isDirectory() ? filesIn(path.join(d, e.name)) : [path.join(d, e.name)]));
 
-test('the sample is neutral, its answers are outside samples/, and every planted problem is still there', () => {
+test('the sample is neutral, its answers are kept out of samples/ (so they aren\'t copied with it), and every planted problem is still there', () => {
   const samples = path.join(ROOT, 'samples');
   assert.ok(!filesIn(samples).some(f => /expected-findings/i.test(f)), 'no answers inside samples/');
   for (const f of filesIn(path.join(samples, 'target'))) assert.doesNotThrow(() => checkTarget(fs.readFileSync(f, 'utf8')), f);

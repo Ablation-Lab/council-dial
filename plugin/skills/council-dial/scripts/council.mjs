@@ -6,6 +6,7 @@
 //                            [--n 3] [--roles "a, b, c"] [--debate] [--sequential] [--baseline]
 //                            [--no-appeal] [--model sonnet|opus|haiku|fable] [--main-model <model id>]
 //                            [--log-dir reviews] [--project <dir>]          (what to review, on stdin)
+//   node council.mjs estimate (the same type options as plan; writes nothing)
 //   node council.mjs log     --run <id> [--log-dir reviews] [--project <dir>]  (results JSON on stdin)
 //   node council.mjs update  --run <id> [--log-dir reviews] [--project <dir>]  (recheck JSON on stdin)
 //   node council.mjs report  --run <id> --agent <label> [--replace] [--saved-later]
@@ -16,9 +17,12 @@
 //
 // It writes only the review log: <log dir>/review-log.jsonl (append-only) and review-log.md (a
 // readable summary rebuilt from it after every write, and built by compare if it's missing), and
-// each run's saved reports in <log dir>/<run id>/, inside the project. Apart from the log it reads only two environment variables, CLAUDE_CODE_SUBAGENT_MODEL
-// and CLAUDE_CODE_SUBAGENT_MODEL_FORCE, which can change the model subagents run on. It starts no
-// programs and makes no network requests. Output is one line of JSON.
+// each run's saved reports in <log dir>/<run id>/, inside the project. It reads only the log folder
+// (the log, and the names of saved reports), checks the project and log paths exist and aren't links,
+// and reads three environment variables: CLAUDE_CODE_SUBAGENT_MODEL and CLAUDE_CODE_SUBAGENT_MODEL_FORCE,
+// which can change the model subagents run on, and CLAUDE_EFFORT, the session's effort level, which plan
+// records. It starts no programs and makes no network requests.
+// Output is one line of JSON.
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
@@ -29,8 +33,12 @@ import { fileURLToPath } from 'node:url';
 export const VERSION = 2;
 // Council Dial's own version, recorded with each plan so a run's setup can be rebuilt exactly. Keep it
 // equal to plugin.json (a test checks).
-export const PLUGIN_VERSION = '1.2.0';
-const COMMANDS = ['plan', 'log', 'update', 'report', 'setup', 'list', 'compare'];
+export const PLUGIN_VERSION = '1.3.0';
+const COMMANDS = ['plan', 'estimate', 'log', 'update', 'report', 'setup', 'list', 'compare'];
+// The description of what's reviewed is kept at this length when planned and when read back.
+export const TARGET_MAX = 600;
+// Anthropic's pricing page: Council Dial gives token counts only, never prices.
+export const PRICING_URL = 'https://claude.com/pricing';
 const REVIEWERS = ['specialised', 'generalist'];
 const COMBINE = ['judged', 'pooled', 'consensus'];
 export const DEFAULT_ROLES = ['correctness', 'security and privacy', 'docs and policy accuracy'];
@@ -40,6 +48,8 @@ const RUN_ID = /^[0-9]{8}-[0-9a-f]{4}$/;
 export const MODEL_ALIASES = ['sonnet', 'opus', 'haiku', 'fable'];
 const MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,59}(\[1m\])?$/;
 export const STEPS = ['review', 'debate', 'combine', 'appeal', 'baseline'];
+// Effort levels Claude Code uses; CLAUDE_EFFORT holds the session's.
+export const EFFORT_LEVELS = ['low', 'medium', 'high', 'xhigh', 'max'];
 const MAX_GROUPS = 50;
 
 export function parseArgs(argv) {
@@ -64,11 +74,11 @@ export function parseArgs(argv) {
     else if (a === '--log-dir') o.logDir = val();
     else if (a === '--project') o.project = val();
     else if (a === '--run') o.run = val();
-    else if (a === '--limit') o.limit = Number(val());
+    else if (a === '--limit') { o.limit = Number(val()); o.limitGiven = true; }
     else throw new Error(`unknown option ${a}`);
   }
   if (!COMMANDS.includes(cmd)) throw new Error(`unknown command "${cmd ?? ''}"; use ${COMMANDS.join(', ')}`);
-  if (cmd === 'plan') {
+  if (cmd === 'plan' || cmd === 'estimate') {
     if (!REVIEWERS.includes(o.reviewers)) throw new Error(`--reviewers must be ${REVIEWERS.join(' or ')}`);
     if (!COMBINE.includes(o.combine)) throw new Error(`--combine must be ${COMBINE.join(', ')}`);
     if (o.roles != null && o.reviewers !== 'specialised') throw new Error('--roles is for specialised reviewers');
@@ -76,10 +86,14 @@ export function parseArgs(argv) {
     if (o.model != null && !MODEL_ALIASES.includes(o.model)) throw new Error(`--model must be ${MODEL_ALIASES.join(', ')} (the Agent tool takes only these aliases); leave it out to use this session's model`);
     if (o.mainModel != null && !MODEL_ID.test(o.mainModel)) throw new Error('--main-model is the main session\'s model id, such as claude-opus-5-5');
   } else if (o.n != null || o.roles != null || o.reviewers || o.combine || o.debate || o.sequential || o.baseline || o.noAppeal || o.model != null || o.mainModel != null) {
-    throw new Error(`--n, --roles, --reviewers, --combine, --debate, --sequential, --baseline, --no-appeal, --model and --main-model are for plan only${cmd === 'list' ? ' (list takes --limit)' : ''}`);
+    throw new Error(`--n, --roles, --reviewers, --combine, --debate, --sequential, --baseline, --no-appeal, --model and --main-model are for estimate and plan only${cmd === 'list' ? ' (list takes --limit)' : ''}`);
   }
   if (o.n != null && (!Number.isInteger(o.n) || o.n < 1 || o.n > 9)) throw new Error('--n must be a whole number from 1 to 9');
+  // Run ids are written in lower case; one retyped in capitals is the same id.
+  if (o.run != null) o.run = o.run.toLowerCase();
   if (o.run != null && !RUN_ID.test(o.run)) throw new Error('--run is the run id from plan, such as 20261105-3fa9');
+  if (o.limitGiven && cmd !== 'list') throw new Error('--limit is for list only');
+  delete o.limitGiven;
   if (!Number.isInteger(o.limit) || o.limit < 1 || o.limit > 500) throw new Error('--limit must be a whole number from 1 to 500');
   if (['log', 'update', 'report', 'setup'].includes(cmd) && !o.run) throw new Error('give --run with the id from plan');
   if (cmd === 'report' && !o.agent) throw new Error('give --agent with the agent\'s label from the plan, such as "reviewer: correctness" or "judge"');
@@ -95,8 +109,9 @@ export function clean(text, max = 300) {
   const chars = Array.from(t);
   return chars.length > max ? chars.slice(0, max - 1).join('') + '…' : t;
 }
-// For the Markdown log: no table breaks, HTML, links or images.
-const cell = s => clean(String(s), 120).replace(/\|/g, '/').replace(/</g, '&lt;').replace(/\[/g, '\\[').replace(/!/g, '&#33;').replace(/`/g, "'").replace(/:\/\//g, '&#58;//').replace(/\bwww\./gi, 'www&#46;');
+// One line of plain text for Markdown: no table breaks, HTML, links or images.
+const inlineMd = (s, max) => clean(String(s), max).replace(/\|/g, '/').replace(/</g, '&lt;').replace(/\[/g, '\\[').replace(/!/g, '&#33;').replace(/`/g, "'").replace(/:\/\//g, '&#58;//').replace(/\bwww\./gi, 'www&#46;');
+const cell = s => inlineMd(s, 120);
 
 const SHELL_CHARS = /[$`'"\\;&|<>*?%!{}\0\p{Pi}\p{Pf}]/u;
 const RESERVED = /^(con|prn|aux|nul|com\d|lpt\d)(\..*)?$/i;
@@ -180,6 +195,14 @@ function parseRoles(raw) {
   for (const r of roles) if (SHELL_CHARS.test(r) || r.startsWith('-')) throw new Error(`a role can't start with "-" or contain quotation marks or shell characters: ${r}`);
   const seen = new Set();
   for (const r of roles) { if (seen.has(r.toLowerCase())) throw new Error(`role listed twice: ${r}`); seen.add(r.toLowerCase()); }
+  // Each reviewer's report is saved under a file name made from its role, so two roles that differ
+  // only in punctuation or non-ASCII letters would share one file.
+  const files = new Map();
+  for (const r of roles) {
+    const f = reportName(`reviewer: ${r}`);
+    if (files.has(f)) throw new Error(`roles "${files.get(f)}" and "${r}" would save their reports to the same file (${f}); name them so they differ in their letters a to z or digits`);
+    files.set(f, r);
+  }
   return roles;
 }
 
@@ -214,17 +237,35 @@ export function stepCounts(type) {
   return { review: type.n, debate: type.debate ? type.n : 0, combine: type.combine === 'judged' ? 1 : 0, appeal: type.appeal ? 1 : 0, baseline: type.baseline ? 1 : 0 };
 }
 
-export function buildPlan(o, target, now = new Date(), usedIds = new Set(), env = {}) {
-  const t = clean(target, 600);
-  if (!t) throw new Error('say what to review on stdin (for example: "the diff of branch fix-parser in this repo: src/parser.mjs and its tests")');
-  checkTarget(t);
+// The council type the options describe, and its name: shared by plan and estimate, so an estimate
+// looks up exactly the type that plan would log.
+export function councilType(o, env = {}) {
   const appeal = o.combine === 'judged' && !o.noAppeal;
   const roles = o.reviewers === 'specialised' ? (o.roles != null ? parseRoles(o.roles) : DEFAULT_ROLES) : null;
   if (roles && o.n != null && o.n !== roles.length) throw new Error(`--n is ${o.n} but there are ${roles.length} roles; leave --n out for specialised reviewers`);
   const n = roles ? roles.length : (o.n ?? 3);
   if (n < 2 && (o.debate || o.combine === 'consensus')) throw new Error('debate and consensus need at least 2 reviewers');
   const { models, warnings: modelWarnings } = resolveModels(o, env);
-  const label = labelOf({ reviewers: o.reviewers, n, roles, combine: o.combine, debate: o.debate, sequential: o.sequential, appeal, models });
+  const type = { reviewers: o.reviewers, n, roles, combine: o.combine, debate: o.debate, sequential: o.sequential, baseline: o.baseline, appeal, models };
+  return { type, label: labelOf(type), modelWarnings };
+}
+const agentTotal = type => Object.values(stepCounts(type)).reduce((s, x) => s + x, 0);
+
+// The session's effort level, from CLAUDE_EFFORT. Council Dial doesn't set effort; this records the
+// session's level as the plan saw it, not the level each subagent actually ran at, which isn't
+// reported to the main session. It's kept out of the type's name for now.
+export function sessionEffortOf(env = {}) {
+  const raw = env.CLAUDE_EFFORT == null ? '' : String(env.CLAUDE_EFFORT).trim().toLowerCase();
+  if (!raw) return { effort: null, warnings: [] };
+  if (!EFFORT_LEVELS.includes(raw)) return { effort: null, warnings: [`CLAUDE_EFFORT is set to something Council Dial can't read as an effort level (${EFFORT_LEVELS.join(', ')}), so it isn't recorded`] };
+  return { effort: raw, warnings: [] };
+}
+
+export function buildPlan(o, target, now = new Date(), usedIds = new Set(), env = {}) {
+  const t = clean(target, TARGET_MAX);
+  if (!t) throw new Error('say what to review on stdin (for example: "the diff of branch fix-parser in this repo: src/parser.mjs and its tests")');
+  checkTarget(t);
+  const { type: { appeal, roles, n, models }, label, modelWarnings } = councilType(o, env);
   const day = `${now.getUTCFullYear()}${String(now.getUTCMonth() + 1).padStart(2, '0')}${String(now.getUTCDate()).padStart(2, '0')}`;
   let runId = null;
   for (let tries = 0; tries < 200 && runId == null; tries++) { const id = `${day}-${crypto.randomBytes(2).toString('hex')}`; if (!usedIds.has(id)) runId = id; }
@@ -242,15 +283,17 @@ export function buildPlan(o, target, now = new Date(), usedIds = new Set(), env 
   const warnings = [];
   if (o.combine === 'consensus' && (o.sequential || o.reviewers === 'specialised')) warnings.push(`consensus with ${o.sequential ? 'sequential reviewers (told not to repeat each other)' : 'specialised reviewers (each on its own area)'} keeps few findings, because reviewers rarely raise the same one`);
   warnings.push(...modelWarnings);
+  const { effort: sessionEffort, warnings: effortWarnings } = sessionEffortOf(env);
+  warnings.push(...effortWarnings);
   const agentCount = steps.reduce((s, x) => s + x.agents.length, 0);
   return {
-    runId, version: VERSION, label, target: t,
+    runId, version: VERSION, label, target: t, sessionEffort,
     type: { reviewers: o.reviewers, n, roles, combine: o.combine, debate: o.debate, sequential: o.sequential, baseline: o.baseline, appeal, models },
     agentCount, agentModel: o.model ?? null, steps, warnings,
     resultsTemplate: {
       findingsPerReviewer: reviewers.map(() => 0), findingsCombined: 0, confirmed: 0, overstated: 0, dismissed: 0, verified: null, severity: { high: 0, med: 0, low: 0 }, baseline: o.baseline ? { findings: 0, confirmed: 0, alsoFoundByCouncil: 0 } : null, appeal: appeal ? { ran: false, reviewed: 0, items: [] } : null,
       agents: steps.flatMap(s => s.agents.map(a => ({ label: a.label, step: s.step, model: o.model ?? 'inherit', tokens: null, toolUses: null, durationMs: null }))),
-      wallMinutes: 0, notes: '',
+      wallMinutes: null, notes: '',
     },
   };
 }
@@ -271,8 +314,20 @@ export function checkResults(r, strict = true) {
     baseline: r.baseline && typeof r.baseline === 'object' ? { findings: int(r.baseline.findings, 'baseline.findings'), confirmed: int(r.baseline.confirmed, 'baseline.confirmed'), alsoFoundByCouncil: int(r.baseline.alsoFoundByCouncil, 'baseline.alsoFoundByCouncil') } : null,
     appeal: checkAppeal(r.appeal),
     agents: checkAgents(r.agents),
-    wallMinutes: num(r.wallMinutes, 'wallMinutes'), notes: clean(r.notes, 400),
+    notes: clean(r.notes, 400),
   };
+  // Minutes come in two labelled measures: wallMinutes (wall time, from the start to when the last
+  // agent finished, given by Claude) and criticalPathMinutes (worked out by log from the agents'
+  // reported durations). Rows logged before 1.3.0 have only wallMinutes, which could be either, so
+  // reading one gives it as unlabelledMinutes. A row is from 1.3.0 or later if it has
+  // criticalPathMinutes (null when it couldn't be worked out).
+  const mins = (v, what) => { if (v == null) return null; const m = num(v, what); return m > 0 ? m : null; };
+  if (strict) {
+    if (r.criticalPathMinutes != null) throw new Error('leave criticalPathMinutes out: log works it out from the agents\' durationMs');
+    if (r.wallMinutes === 0) throw new Error('wallMinutes is 0; give null if you didn\'t note when the last agent finished');
+    Object.assign(out, { wallMinutes: mins(r.wallMinutes, 'wallMinutes'), criticalPathMinutes: null, unlabelledMinutes: null });
+  } else if (Object.hasOwn(r, 'criticalPathMinutes')) Object.assign(out, { wallMinutes: mins(r.wallMinutes, 'wallMinutes'), criticalPathMinutes: mins(r.criticalPathMinutes, 'criticalPathMinutes'), unlabelledMinutes: null });
+  else Object.assign(out, { wallMinutes: null, criticalPathMinutes: null, unlabelledMinutes: mins(r.wallMinutes, 'wallMinutes') });
   if (r.verified != null && typeof r.verified !== 'boolean') throw new Error('verified must be true, false or left out');
   const checked = out.confirmed + out.overstated + out.dismissed;
   // verified: true is accepted only when every combined finding was checked (confirmed + overstated +
@@ -352,17 +407,36 @@ export function readLog(file) {
       if (!r || typeof r !== 'object' || !RUN_ID.test(r.runId) || typeof r.time !== 'string' || !ISO.test(r.time)) throw new Error('bad row');
       if (r.kind === 'planned') {
         if (!r.type || typeof r.type !== 'object' || !REVIEWERS.includes(r.type.reviewers) || !COMBINE.includes(r.type.combine) || !Number.isInteger(r.type.n) || r.type.n < 1 || r.type.n > 9) throw new Error('bad type');
-        const roles = r.type.reviewers === 'specialised' && Array.isArray(r.type.roles) && r.type.roles.length === r.type.n && r.type.roles.every(x => typeof x === 'string') ? r.type.roles.map(x => clean(x, 60).replace(new RegExp(SHELL_CHARS.source, 'gu'), '')) : (r.type.reviewers === 'specialised' ? DEFAULT_ROLES : null);
+        // Specialised rows always record their roles; one without them is read with the default
+        // roles only if it has as many reviewers. Roles that don't match the reviewer count make it a
+        // bad row, so it can't be read with the wrong roles under a wrong name.
+        let roles = null;
+        if (r.type.reviewers === 'specialised') {
+          if (Array.isArray(r.type.roles)) {
+            if (r.type.roles.length !== r.type.n || !r.type.roles.every(x => typeof x === 'string')) throw new Error('bad roles');
+            roles = r.type.roles.map(x => clean(x, 60).replace(new RegExp(SHELL_CHARS.source, 'gu'), ''));
+          } else if (r.type.roles == null && r.type.n === DEFAULT_ROLES.length) roles = DEFAULT_ROLES;
+          else throw new Error('bad roles');
+        }
         // Rows from version 1 have no appeal field: those runs had no appeal step.
         // Rows before 1.2.0 have no models: those runs' models weren't recorded. Values that aren't
         // model names are dropped, so a planted row can't put text into the type's name.
         const m = r.type.models && typeof r.type.models === 'object' ? r.type.models : null;
         const mid = v => (typeof v === 'string' && MODEL_ID.test(v) ? v : null);
-        const models = m ? { main: mid(m.main), requested: MODEL_ALIASES.includes(m.requested) ? m.requested : null, env: m.env === 'inherit' ? 'inherit' : mid(m.env), force: m.force === true, effective: mid(m.effective) } : null;
+        // The effective model is always one of the other three (see resolveModels), so any other
+        // value, even one shaped like a model id, is dropped.
+        let models = null;
+        if (m) {
+          models = { main: mid(m.main), requested: MODEL_ALIASES.includes(m.requested) ? m.requested : null, env: m.env === 'inherit' ? 'inherit' : mid(m.env), force: m.force === true, effective: null };
+          const eff = mid(m.effective);
+          if (eff && eff !== 'inherit' && [models.requested, models.env, models.main].includes(eff)) models.effective = eff;
+        }
         const type = { reviewers: r.type.reviewers, n: r.type.n, combine: r.type.combine, debate: !!r.type.debate, sequential: !!r.type.sequential, baseline: !!r.type.baseline, appeal: r.type.combine === 'judged' && r.type.appeal === true, roles, models };
         // The label is rebuilt from the type, never taken from the line, so a planted or cut label
         // can't rename a run or merge two types.
-        rows.push({ kind: 'planned', runId: r.runId, time: r.time, version: Number.isInteger(r.version) ? r.version : 1, councilDial: typeof r.councilDial === 'string' && /^\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(r.councilDial) ? r.councilDial : null, label: labelOf(type), target: clean(r.target, 300), type });
+        rows.push({ kind: 'planned', runId: r.runId, time: r.time, version: Number.isInteger(r.version) ? r.version : 1, councilDial: typeof r.councilDial === 'string' && /^\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(r.councilDial) ? r.councilDial : null, label: labelOf(type), target: clean(r.target, TARGET_MAX), type,
+          // Rows from 1.3.0 have sessionEffort (null when CLAUDE_EFFORT wasn't set); older rows don't.
+          effortRecorded: Object.hasOwn(r, 'sessionEffort'), sessionEffort: EFFORT_LEVELS.includes(r.sessionEffort) ? r.sessionEffort : null });
       } else if (r.kind === 'results') rows.push({ kind: 'results', runId: r.runId, time: r.time, results: checkResults(r.results, false) });
       else if (r.kind === 'update') rows.push({ kind: 'update', runId: r.runId, time: r.time, update: checkUpdate(r.update) });
       else throw new Error('bad kind');
@@ -375,10 +449,11 @@ export function readLog(file) {
 export function runsFrom(rows) {
   const runs = new Map();
   for (const r of rows) {
-    if (r.kind === 'planned') { if (!runs.has(r.runId)) runs.set(r.runId, { runId: r.runId, time: r.time, version: r.version, councilDial: r.councilDial, label: r.label, target: r.target, type: r.type, results: null, updates: [] }); continue; }
+    if (r.kind === 'planned') { if (!runs.has(r.runId)) runs.set(r.runId, { runId: r.runId, time: r.time, version: r.version, councilDial: r.councilDial, label: r.label, target: r.target, type: r.type, effortRecorded: r.effortRecorded, sessionEffort: r.sessionEffort, results: null, resultsLogged: 0, updates: [] }); continue; }
     const run = runs.get(r.runId);
     if (!run) continue;
-    if (r.kind === 'results') run.results = r.results;
+    // Logging a run again replaces its results; resultsLogged counts how often, so the Markdown can say so.
+    if (r.kind === 'results') { run.results = r.results; run.resultsLogged++; }
     if (r.kind === 'update') run.updates.push(r.update);
   }
   return [...runs.values()];
@@ -386,18 +461,28 @@ export function runsFrom(rows) {
 
 const ratio = (a, b) => (b > 0 ? Math.round((a / b) * 100) : null);
 const one = v => Math.round(v * 10) / 10;
+// A run's total tokens, only when every listed agent's tokens were reported (null otherwise), so a run
+// with gaps doesn't look cheaper than it was.
+const runTokens = res => (res?.agents?.length && res.agents.every(x => x.tokens != null) ? res.agents.reduce((s, x) => s + x.tokens, 0) : null);
+// Kept findings are the ones that survive judging, REAL or OVERSTATED: an OVERSTATED finding is a real
+// problem rated too high, so it counts as found. How often the judge cut a kept finding's severity
+// is reported separately, as the overstated share of kept findings.
+const kept = res => res.confirmed + res.overstated;
 export function compare(runs) {
   const groups = new Map();
   for (const r of runs) {
-    const g = groups.get(r.label) || { label: r.label, planned: 0, runs: 0, verifiedRuns: 0, combined: 0, combinedVerified: 0, confirmed: 0, dismissed: 0, minutes: 0, fixes: 0, failedFixes: 0, regressions: 0, rechecked: 0, baselineRuns: 0, baselineConfirmed: 0, councilConfirmedWithBaseline: 0, appealRuns: 0, appealReviewed: 0, appealFlagged: 0, appealReinstated: 0, appealPending: 0, tokenRuns: 0, tokens: 0, appealTokenRuns: 0, appealTokens: 0 };
+    const g = groups.get(r.label) || { label: r.label, planned: 0, runs: 0, verifiedRuns: 0, combined: 0, combinedVerified: 0, kept: 0, overstated: 0, dismissed: 0, wall: [0, 0], path: [0, 0], unlabelled: [0, 0], fixes: 0, failedFixes: 0, regressions: 0, rechecked: 0, baselineRuns: 0, baselineConfirmed: 0, councilKeptWithBaseline: 0, appealRuns: 0, appealReviewed: 0, appealFlagged: 0, appealReinstated: 0, appealPending: 0, tokenRuns: 0, tokens: 0, appealTokenRuns: 0, appealTokens: 0 };
     g.planned++;
     groups.set(r.label, g);
     if (!r.results) continue;
-    g.runs++; g.combined += r.results.findingsCombined; g.minutes += r.results.wallMinutes;
-    if (r.results.verified) { g.verifiedRuns++; g.combinedVerified += r.results.findingsCombined; g.confirmed += r.results.confirmed; g.dismissed += r.results.dismissed; }
+    const res = r.results;
+    g.runs++; g.combined += res.findingsCombined;
+    // Each measure of minutes is averaged only over the runs that have it, never mixed.
+    for (const [k, v] of [['wall', res.wallMinutes], ['path', res.criticalPathMinutes], ['unlabelled', res.unlabelledMinutes]]) if (v != null) { g[k][0]++; g[k][1] += v; }
+    if (res.verified) { g.verifiedRuns++; g.combinedVerified += res.findingsCombined; g.kept += kept(res); g.overstated += res.overstated; g.dismissed += res.dismissed; }
     if (r.updates.length) g.rechecked++;
     for (const u of r.updates) { g.fixes += u.fixesMade; g.failedFixes += u.fixesFailedRecheck; g.regressions += u.regressions; }
-    if (r.results.baseline && r.results.verified) { g.baselineRuns++; g.baselineConfirmed += r.results.baseline.confirmed; g.councilConfirmedWithBaseline += r.results.confirmed; }
+    if (res.baseline && res.verified) { g.baselineRuns++; g.baselineConfirmed += res.baseline.confirmed; g.councilKeptWithBaseline += kept(res); }
     // Only runs planned with the appeal step count here; a run where the judge dismissed nothing
     // (appeal.ran false) counts as a run with nothing to appeal.
     if (r.type.appeal && r.results.appeal) {
@@ -405,20 +490,20 @@ export function compare(runs) {
       g.appealRuns++; g.appealReviewed += a.reviewed; g.appealFlagged += a.items.length;
       g.appealReinstated += a.items.filter(x => x.call === 'reinstated').length; g.appealPending += a.items.filter(x => x.call === 'pending').length;
     }
-    // Tokens count only runs where every listed agent's tokens were reported, so a run with gaps
-    // doesn't look cheaper than it was.
-    const ag = r.results.agents;
-    if (ag?.length && ag.every(x => x.tokens != null)) { g.tokenRuns++; g.tokens += ag.reduce((s, x) => s + x.tokens, 0); }
-    const ap = ag?.find(x => x.step === 'appeal' && x.tokens != null);
+    const t = runTokens(res);
+    if (t != null) { g.tokenRuns++; g.tokens += t; }
+    const ap = res.agents?.find(x => x.step === 'appeal' && x.tokens != null);
     if (ap) { g.appealTokenRuns++; g.appealTokens += ap.tokens; }
   }
+  const avg = ([k, sum]) => (k ? { perRun: one(sum / k), runs: k } : null);
   const all = [...groups.values()].map(g => ({
     label: g.label, runs: g.runs,
     findingsPerRun: g.runs ? one(g.combined / g.runs) : null,
-    confirmedPercent: ratio(g.confirmed, g.combinedVerified), dismissedPercent: ratio(g.dismissed, g.combinedVerified),
-    minutesPerRun: g.runs ? one(g.minutes / g.runs) : null,
+    keptPercent: ratio(g.kept, g.combinedVerified), dismissedPercent: ratio(g.dismissed, g.combinedVerified),
+    overstatedOfKeptPercent: ratio(g.overstated, g.kept),
+    minutes: { wall: avg(g.wall), criticalPath: avg(g.path), unlabelled: avg(g.unlabelled) },
     fixesFailedRecheckPercent: ratio(g.failedFixes, g.fixes), regressionsPerRecheckedRun: g.rechecked ? one(g.regressions / g.rechecked) : null,
-    baseline: g.baselineRuns ? { runs: g.baselineRuns, councilConfirmedPerRun: one(g.councilConfirmedWithBaseline / g.baselineRuns), baselineConfirmedPerRun: one(g.baselineConfirmed / g.baselineRuns) } : null,
+    baseline: g.baselineRuns ? { runs: g.baselineRuns, councilKeptPerRun: one(g.councilKeptWithBaseline / g.baselineRuns), baselineConfirmedPerRun: one(g.baselineConfirmed / g.baselineRuns) } : null,
     appeal: g.appealRuns ? { runs: g.appealRuns, dismissedChecked: g.appealReviewed, flagged: g.appealFlagged, reinstated: g.appealReinstated, pending: g.appealPending } : null,
     tokensPerRun: g.tokenRuns ? Math.round(g.tokens / g.tokenRuns) : null, tokenRuns: g.tokenRuns,
     appealTokensPerRun: g.appealTokenRuns ? Math.round(g.appealTokens / g.appealTokenRuns) : null,
@@ -427,19 +512,67 @@ export function compare(runs) {
   return Object.assign(all.slice(0, MAX_GROUPS), { more: Math.max(0, all.length - MAX_GROUPS) });
 }
 
+// A rough token estimate for a council type before it runs: the average total tokens of the logged
+// runs of exactly that type that have every agent's tokens. It writes nothing and gives no prices.
+export function estimateOf(runs, type, label) {
+  const same = runs.filter(r => r.label === label);
+  const logged = same.filter(r => r.results);
+  const counted = logged.map(r => ({ r, tokens: runTokens(r.results) })).filter(x => x.tokens != null);
+  const agentCount = agentTotal(type);
+  const quick = type.reviewers === 'generalist' && type.combine === 'pooled' && type.n <= 3 && !type.debate && !type.baseline;
+  const trial = `a smaller trial run first: ${quick ? '' : 'a Quick council (3 generalist reviewers, pooled), or '}this council on one part of the material, logged like any other run`;
+  const notes = [];
+  let tokens = null;
+  if (counted.length) {
+    const all = counted.map(x => x.tokens);
+    tokens = { perRun: Math.round(all.reduce((s, x) => s + x, 0) / all.length), low: Math.min(...all), high: Math.max(...all), runs: all.length };
+    notes.push(`About ${tokens.perRun} tokens: the average of ${tokens.runs} logged ${tokens.runs === 1 ? 'run' : 'runs'} of ${label}${tokens.runs > 1 ? ` (${tokens.low} to ${tokens.high})` : ''}.${tokens.runs < 3 ? ' So few runs make this a very rough guide.' : ''}`);
+  } else notes.push(`No logged run of ${label} has every agent's tokens, so there's no estimate for it. Suggest ${trial}; its tokens then give a guide for the full run.`);
+  if (logged.length > counted.length) notes.push(`${logged.length - counted.length} other logged ${logged.length - counted.length === 1 ? 'run' : 'runs'} of this type ${logged.length - counted.length === 1 ? 'is' : 'are'} left out because not every agent's tokens were reported.`);
+  notes.push('Bigger material costs more: every reviewer reads all of it (and debate agents and the judge also read every report), so material larger than those runs reviewed (see basedOn) uses more tokens than this.');
+  if (counted.length) notes.push(`If the material looks large, suggest ${trial}.`);
+  if (type.appeal) notes.push(`${agentCount} agents counts the appeal agent, which runs only if the judge throws a finding out.`);
+  notes.push(`These are tokens as Claude Code reported them for each subagent (it doesn't say whether cached tokens are included). Council Dial gives no prices; see ${PRICING_URL}.`);
+  return {
+    label, agentCount, tokens, loggedRuns: logged.length, trialSuggested: !counted.length,
+    basedOn: counted.slice(-5).map(({ r, tokens: t }) => ({ runId: r.runId, date: r.time.slice(0, 10), target: clean(r.target, 120), tokens: t })),
+    notes, pricing: PRICING_URL,
+  };
+}
+
+const minutesText = (wall, crit, unlabelled) => [wall != null && `wall ${wall}`, crit != null && `critical path ${crit}`, unlabelled != null && `${unlabelled} (unlabelled)`].filter(Boolean).join(', ') || '-';
+
+// The agents' critical path in minutes, from their reported durations: the reviewers (the slowest, or
+// all of them one after another when sequential), then the slowest debate agent, the judge and the
+// appeal; the baseline runs alongside. Null unless every agent that ran is listed with a duration.
+export function criticalPathOf(type, res) {
+  const ag = res.agents;
+  if (!ag?.length || ag.some(a => a.durationMs == null)) return null;
+  const c = stepCounts(type);
+  const of = s => ag.filter(a => a.step === s).map(a => a.durationMs);
+  const [review, debate, combine, appeal, baseline] = STEPS.map(of);
+  const appealRan = type.appeal && res.appeal?.ran === true;
+  if (review.length !== c.review || debate.length !== c.debate || combine.length !== c.combine || baseline.length !== c.baseline || appeal.length !== (appealRan ? 1 : 0)) return null;
+  const sum = xs => xs.reduce((s, x) => s + x, 0), max = xs => Math.max(0, ...xs);
+  const ms = Math.max((type.sequential ? sum(review) : max(review)) + max(debate) + sum(combine) + sum(appeal), max(baseline));
+  return ms > 0 ? Math.round(ms / 6000) / 10 : null;
+}
+
 function markdown(runs) {
   const pct = v => (v == null ? '-' : `${v}%`);
   const dash = v => (v == null ? '-' : v);
   const L = ['# Review log', '', 'Written by Council Dial from review-log.jsonl; edits here are replaced on the next run.', '', '## Runs', ''];
   if (!runs.length) L.push('No runs yet.', '');
   else {
-    L.push('| Run | Date | Type | Target | Findings | Confirmed | Dismissed | Minutes | Tokens | Fixes failed recheck | Baseline confirmed | Appeal |', '|---|---|---|---|---|---|---|---|---|---|---|---|');
+    L.push('| Run | Date | Type | Target | Findings | Kept (overstated) | Dismissed | Minutes | Tokens | Fixes failed recheck | Baseline confirmed | Appeal |', '|---|---|---|---|---|---|---|---|---|---|---|---|');
     for (const r of runs) {
       const res = r.results, fx = r.updates.reduce((a, u) => ({ made: a.made + u.fixesMade, failed: a.failed + u.fixesFailedRecheck }), { made: 0, failed: 0 });
       const ap = r.type.appeal && res?.appeal ? (res.appeal.ran ? `${res.appeal.items.length} of ${res.appeal.reviewed} flagged, ${res.appeal.items.filter(x => x.call === 'reinstated').length} reinstated` : 'nothing dismissed') : '-';
       const known = res?.agents?.filter(x => x.tokens != null) ?? [];
       const tok = known.length ? `${known.reduce((s, x) => s + x.tokens, 0)}${known.length < res.agents.length ? ` (${known.length} of ${res.agents.length} agents)` : ''}` : '-';
-      L.push(`| ${r.runId} | ${cell(r.time.slice(0, 10))} | ${cell(r.label)} | ${cell(r.target)} | ${res ? res.findingsCombined : 'not logged'} | ${res ? (res.verified ? res.confirmed : 'unverified') : '-'} | ${res ? (res.verified ? res.dismissed : '-') : '-'} | ${res ? res.wallMinutes : '-'} | ${tok} | ${r.updates.length ? `${fx.failed} of ${fx.made}` : '-'} | ${res?.baseline ? res.baseline.confirmed : '-'} | ${ap} |`);
+      const min = res ? minutesText(res.wallMinutes, res.criticalPathMinutes, res.unlabelledMinutes) : '-';
+      const found = res ? `${res.findingsCombined}${r.resultsLogged > 1 ? ' (re-logged)' : ''}` : 'not logged';
+      L.push(`| ${r.runId} | ${cell(r.time.slice(0, 10))} | ${cell(r.label)} | ${cell(r.target)} | ${found} | ${res ? (res.verified ? `${kept(res)} (${res.overstated})` : 'unverified') : '-'} | ${res ? (res.verified ? res.dismissed : '-') : '-'} | ${min} | ${tok} | ${r.updates.length ? `${fx.failed} of ${fx.made}` : '-'} | ${res?.baseline ? res.baseline.confirmed : '-'} | ${ap} |`);
     }
     L.push('');
   }
@@ -447,10 +580,12 @@ function markdown(runs) {
   L.push('## By type', '');
   if (!c.length) L.push('No runs yet.', '');
   else {
-    L.push('| Type | Runs | Findings per run | Confirmed | Dismissed | Minutes per run | Tokens per run (appeal agent) | Fixes that failed recheck | Regressions per rechecked run | Council vs baseline (confirmed per run) | Appeal: dismissals flagged, reinstated | Unverified runs | Planned, not logged |', '|---|---|---|---|---|---|---|---|---|---|---|---|---|');
-    for (const g of c) L.push(`| ${cell(g.label)} | ${g.runs} | ${dash(g.findingsPerRun)} | ${pct(g.confirmedPercent)} | ${pct(g.dismissedPercent)} | ${dash(g.minutesPerRun)} | ${g.tokensPerRun == null ? '-' : `${g.tokensPerRun}${g.appealTokensPerRun != null ? ` (${g.appealTokensPerRun})` : ''}`} | ${pct(g.fixesFailedRecheckPercent)} | ${dash(g.regressionsPerRecheckedRun)} | ${g.baseline ? `${g.baseline.councilConfirmedPerRun} vs ${g.baseline.baselineConfirmedPerRun} (${g.baseline.runs} ${g.baseline.runs === 1 ? 'run' : 'runs'})` : '-'} | ${g.appeal ? `${g.appeal.flagged} of ${g.appeal.dismissedChecked}, ${g.appeal.reinstated} reinstated${g.appeal.pending ? `, ${g.appeal.pending} pending` : ''}` : '-'} | ${g.unverifiedRuns} | ${g.unfinishedRuns} |`);
+    const runsOf = k => `${k} ${k === 1 ? 'run' : 'runs'}`;
+    const minCell = m => [m.wall && `wall ${m.wall.perRun} (${runsOf(m.wall.runs)})`, m.criticalPath && `critical path ${m.criticalPath.perRun} (${runsOf(m.criticalPath.runs)})`, m.unlabelled && `unlabelled ${m.unlabelled.perRun} (${runsOf(m.unlabelled.runs)})`].filter(Boolean).join(', ') || '-';
+    L.push('| Type | Runs | Findings per run | Kept | Dismissed | Kept but severity cut | Minutes per run | Tokens per run (appeal agent) | Fixes that failed recheck | Regressions per rechecked run | Council kept vs baseline confirmed (per run) | Appeal: dismissals flagged, reinstated | Unverified runs | Planned, not logged |', '|---|---|---|---|---|---|---|---|---|---|---|---|---|---|');
+    for (const g of c) L.push(`| ${cell(g.label)} | ${g.runs} | ${dash(g.findingsPerRun)} | ${pct(g.keptPercent)} | ${pct(g.dismissedPercent)} | ${pct(g.overstatedOfKeptPercent)} | ${minCell(g.minutes)} | ${g.tokensPerRun == null ? '-' : `${g.tokensPerRun}${g.appealTokensPerRun != null ? ` (${g.appealTokensPerRun})` : ''}`} | ${pct(g.fixesFailedRecheckPercent)} | ${dash(g.regressionsPerRecheckedRun)} | ${g.baseline ? `${g.baseline.councilKeptPerRun} vs ${g.baseline.baselineConfirmedPerRun} (${runsOf(g.baseline.runs)})` : '-'} | ${g.appeal ? `${g.appeal.flagged} of ${g.appeal.dismissedChecked}, ${g.appeal.reinstated} reinstated${g.appeal.pending ? `, ${g.appeal.pending} pending` : ''}` : '-'} | ${g.unverifiedRuns} | ${g.unfinishedRuns} |`);
     if (c.more) L.push('', `(${c.more} more types not shown.)`);
-    L.push('', 'Confirmed and dismissed shares count only verified runs. Tokens per run count only runs where Claude Code reported every agent\'s tokens. A type ending in @ and a model was run on that model (as asked for; Claude Code doesn\'t report the model a subagent actually ran on to the main session). Small numbers of runs say little; compare types on the same kind of target.', '', 'Where a run\'s reports were saved, they are in the folder named by its run id, next to this file. Finding numbers restart in every run, so cite them with the run id, such as 20261107-2f23/M12.', '');
+    L.push('', 'Kept is the share of combined findings that survived checking, REAL or OVERSTATED (an OVERSTATED finding is a real problem rated too high); dismissed is the share marked NOT REAL. Kept but severity cut is the share of kept findings marked OVERSTATED, which shows how far the reviewers\' severities had to be corrected. All three count only verified runs.', '', 'Minutes are of two kinds and never averaged together: wall time, from the start to when the last agent finished, and the critical path, worked out from the agents\' reported times (the slowest reviewer, then each later step), which leaves out Claude\'s own time between steps. Minutes logged before Council Dial 1.3.0 are unlabelled, because they could be either; logging the run again labels them.', '', 'Tokens per run count only runs where Claude Code reported every agent\'s tokens. A type ending in @ and a model was run on that model (as asked for; Claude Code doesn\'t report the model a subagent actually ran on to the main session). Small numbers of runs say little; compare types on the same kind of target.', '', 'Where a run\'s reports were saved, they are in the folder named by its run id, next to this file. Finding numbers restart in every run, so cite them with the run id, such as 20261107-2f23/M12.', '');
   }
   return L.join('\n');
 }
@@ -481,10 +616,12 @@ function append(p, row) {
 
 // ---- Saved reports: one Markdown file per agent in <log dir>/<run id>/, so anyone can read what each
 // agent found and what the judge threw out and why.
-export function agentLabels(type) {
+// Every agent a type can start, with the step it belongs to, in plan order.
+export function agentSteps(type) {
   const rev = Array.from({ length: type.n }, (_, i) => (type.reviewers === 'specialised' && type.roles ? `reviewer: ${type.roles[i]}` : `reviewer ${i + 1}`));
-  return [...rev, ...(type.debate ? rev.map(l => `${l} (debate)`) : []), ...(type.combine === 'judged' ? ['judge'] : []), ...(type.appeal ? ['appeal'] : []), ...(type.baseline ? ['baseline reviewer'] : [])];
+  return [...rev.map(label => ({ label, step: 'review' })), ...(type.debate ? rev.map(l => ({ label: `${l} (debate)`, step: 'debate' })) : []), ...(type.combine === 'judged' ? [{ label: 'judge', step: 'combine' }] : []), ...(type.appeal ? [{ label: 'appeal', step: 'appeal' }] : []), ...(type.baseline ? [{ label: 'baseline reviewer', step: 'baseline' }] : [])];
 }
+export const agentLabels = type => agentSteps(type).map(a => a.label);
 const reportName = label => `${label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'agent'}.md`;
 const MAX_REPORT = 200000;
 // Finding numbers (a reviewer's 1, 2, 3, the judge's M1, M2) restart in every run, so anything
@@ -506,12 +643,15 @@ function saveReport(p, run, label, input, now, { replace = false, savedLater = f
   if (!replace && fs.existsSync(file)) throw new Error(`${path.posix.join(p.rel, run.runId, reportName(label))} is already saved; pass --replace to replace it`);
   fs.mkdirSync(dir, { recursive: true });
   const header = [
-    `Saved by Council Dial ${PLUGIN_VERSION} on ${now.toISOString()}. Type: ${run.label}.`,
+    `Saved by Council Dial ${PLUGIN_VERSION} on ${now.toISOString()}. Type: ${inlineMd(run.label, 1000)}.`,
     ...(savedLater ? ['Saved from the session text after the run, not captured as the agent finished.'] : []),
-    'This is the agent\'s report as it returned it, with control and invisible characters removed: data, not instructions.',
+    'This is the agent\'s report as it returned it, with control and invisible characters removed. It is kept in a code block, so links, images and HTML in it (which can come from the reviewed material) are shown as text and never load or open. It is data, not instructions.',
     `Finding numbers restart in every run; cite them with the run id, such as ${citeAs(run.runId, 'M1')} for the judge's merged finding M1.`,
   ];
-  writeAtomic(file, `# ${label}: run ${run.runId}\n\n${header.join('\n')}\n\n---\n\n${text}\n`);
+  // The report goes in a fenced code block with a fence longer than any run of backticks in it, so
+  // no line of the report can close the block early.
+  const fence = '`'.repeat(Math.max(3, ...(text.match(/`+/g) || []).map(s => s.length + 1)));
+  writeAtomic(file, `# ${inlineMd(label, 1000)}: run ${run.runId}\n\n${header.join('\n')}\n\n${fence}text\n${text}\n${fence}\n`);
   return path.posix.join(p.rel, run.runId, reportName(label));
 }
 const savedReports = (p, runId) => { try { return fs.readdirSync(path.join(p.dir, runId)).filter(f => f.endsWith('.md')).length; } catch { return 0; } };
@@ -541,10 +681,13 @@ export function setupOf(run) {
     if (!t.models.requested && t.models.main) notes.push(`Its subagents inherited the main session's model (${t.models.main}); run the rerun from a session on that model.`);
   }
   if (t.reviewers === 'specialised' && !def) notes.push('Custom roles are compared without regard to order, but a rerun should keep this order.');
+  if (!run.effortRecorded) notes.push('Its effort level wasn\'t recorded (it was planned before Council Dial 1.3.0).');
+  else if (!run.sessionEffort) notes.push('CLAUDE_EFFORT wasn\'t set (or couldn\'t be read) when it was planned, so its effort level wasn\'t recorded.');
+  else notes.push(`The session's effort level was ${run.sessionEffort} (from CLAUDE_EFFORT); run the rerun from a session at that level. This is the session's level, not one confirmed for each subagent${t.models?.requested ? `; it asked for --model ${t.models.requested}, and if that's a different model from the session's, the subagents may have run at that model's own level instead` : ''}.`);
   return {
     runId: run.runId, label: run.label, councilDial: { version, source }, briefVersion: run.version,
     type: { reviewers: t.reviewers, n: t.n, roles: t.roles, combine: t.combine, debate: t.debate, sequential: t.sequential, baseline: t.baseline, appeal: t.appeal },
-    models: t.models, target: run.target,
+    models: t.models, effort: { session: run.sessionEffort, recorded: run.effortRecorded }, target: run.target,
     rerun: `node "<skill folder>/scripts/council.mjs" ${args.join(' ')} --project '<project root>'`, notes,
   };
 }
@@ -562,8 +705,12 @@ export function runCommand(o, input, now = new Date(), env = process.env) {
   switch (o.cmd) {
     case 'plan': {
       const plan = buildPlan(o, input, now, new Set(runs.map(r => r.runId)), env);
-      const warning = append(p, { kind: 'planned', runId: plan.runId, version: VERSION, councilDial: PLUGIN_VERSION, time: now.toISOString(), label: plan.label, target: plan.target, type: plan.type });
+      const warning = append(p, { kind: 'planned', runId: plan.runId, version: VERSION, councilDial: PLUGIN_VERSION, time: now.toISOString(), label: plan.label, target: plan.target, type: plan.type, sessionEffort: plan.sessionEffort });
       return { ...plan, log: path.posix.join(p.rel, 'review-log.jsonl'), ...note, ...(warning ? { warning } : {}) };
+    }
+    case 'estimate': {
+      const { type, label, modelWarnings } = councilType(o, env);
+      return { ...estimateOf(runs, type, label), warnings: modelWarnings, ...note };
     }
     case 'log': {
       const run = runs.find(r => r.runId === o.run);
@@ -575,13 +722,27 @@ export function runCommand(o, input, now = new Date(), env = process.env) {
       if (results.agents) {
         const max = stepCounts(run.type);
         for (const s of STEPS) { const k = results.agents.filter(a => a.step === s).length; if (k > max[s]) throw new Error(`agents lists ${k} ${s} agents; this run had ${max[s]}`); }
+        // Each entry must be one of this run's agents, at its own step, listed once; an appeal agent
+        // only if the appeal ran.
+        const plan = agentSteps(run.type), seen = new Set();
+        results.agents.forEach((a, i) => {
+          const m = plan.find(x => x.label.toLowerCase() === a.label.toLowerCase());
+          if (!m) throw new Error(`agents[${i}].label must be one of this run's agents: ${plan.map(x => x.label).join('; ')}`);
+          if (m.step !== a.step) throw new Error(`agents[${i}] (${m.label}) is at step ${m.step}, not ${a.step}`);
+          if (seen.has(m.label)) throw new Error(`agents lists ${m.label} twice`);
+          if (m.step === 'appeal' && results.appeal?.ran !== true) throw new Error('agents lists the appeal agent, but appeal.ran isn\'t true; drop the appeal entry if it didn\'t run, or set appeal.ran');
+          seen.add(m.label); a.label = m.label;
+        });
       }
-      const warning = append(p, { kind: 'results', runId: o.run, time: now.toISOString(), results });
-      return { logged: true, runId: o.run, label: run.label, replaced: !!run.results, verified: results.verified, message: `Logged the results of run ${o.run} (${run.label}) in ${p.rel}/review-log.md.`, ...note, ...(warning ? { warning } : {}) };
+      const { unlabelledMinutes, ...row } = results;
+      row.criticalPathMinutes = criticalPathOf(run.type, results);
+      const warning = append(p, { kind: 'results', runId: o.run, time: now.toISOString(), results: row });
+      return { logged: true, runId: o.run, label: run.label, replaced: !!run.results, verified: results.verified, wallMinutes: row.wallMinutes, criticalPathMinutes: row.criticalPathMinutes, message: `Logged the results of run ${o.run} (${run.label}) in ${p.rel}/review-log.md.`, ...note, ...(warning ? { warning } : {}) };
     }
     case 'update': {
       const run = runs.find(r => r.runId === o.run);
       if (!run) throw new Error(`no planned run ${o.run} in ${p.rel}/review-log.jsonl`);
+      if (!run.results) throw new Error(`run ${o.run} has no results logged yet; log them first (log --run ${o.run}), then add the recheck`);
       const update = checkUpdate(parseJsonInput(input));
       const warning = append(p, { kind: 'update', runId: o.run, time: now.toISOString(), update });
       return { logged: true, runId: o.run, message: `Added the recheck results to run ${o.run}.`, ...note, ...(warning ? { warning } : {}) };

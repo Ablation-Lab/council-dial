@@ -70,12 +70,14 @@ test('plan logs the type; log, update, list and compare work; the Markdown log i
   run(p, ['update', '--run', a.runId], JSON.stringify({ fixesMade: 7, fixesFailedRecheck: 2, regressions: 1, newFindings: 1 }));
   const c = run(p, ['compare']).byType;
   const judged = c.find(x => x.label === 'specialised-3/judged+appeal');
-  assert.equal(judged.confirmedPercent, 78);
+  assert.equal(judged.keptPercent, 89, 'REAL and OVERSTATED are both kept');
+  assert.equal(judged.overstatedOfKeptPercent, 13);
   assert.equal(judged.fixesFailedRecheckPercent, 29);
-  assert.deepEqual(judged.baseline, { runs: 1, councilConfirmedPerRun: 7, baselineConfirmedPerRun: 3 });
+  assert.deepEqual(judged.baseline, { runs: 1, councilKeptPerRun: 8, baselineConfirmedPerRun: 3 });
+  assert.deepEqual(judged.minutes, { wall: { perRun: 12.5, runs: 1 }, criticalPath: null, unlabelled: null });
   assert.equal(c.find(x => x.label === 'generalist-3/pooled').dismissedPercent, 36);
   const md = fs.readFileSync(path.join(p, 'reviews/review-log.md'), 'utf8');
-  assert.match(md, /\| specialised-3\/judged\+appeal \| 1 \| 9 \| 78% \| 11% \| 12\.5 \| - \| 29% \| 1 \| 7 vs 3 \(1 run\) \| - \| 0 \| 0 \|/);
+  assert.match(md, /\| specialised-3\/judged\+appeal \| 1 \| 9 \| 89% \| 11% \| 13% \| wall 12\.5 \(1 run\) \| - \| 29% \| 1 \| 8 vs 3 \(1 run\) \| - \| 0 \| 0 \|/);
   assert.match(md, /2 of 7/);
   const lines = fs.readFileSync(path.join(p, 'reviews/review-log.jsonl'), 'utf8').trim().split('\n');
   assert.equal(lines.length, 5, 'append-only: 2 plans, 2 results, 1 update');
@@ -128,7 +130,7 @@ test('the sample review log compares as the README says', () => {
   assert.equal(runs.length, 6);
   const c = compare(runs);
   assert.deepEqual(c.map(x => x.label), ['specialised-3/judged', 'generalist-3/pooled', 'specialised-3/judged+debate']);
-  assert.ok(c.find(x => x.label === 'specialised-3/judged').confirmedPercent > c.find(x => x.label === 'generalist-3/pooled').confirmedPercent);
+  assert.ok(c.find(x => x.label === 'specialised-3/judged').keptPercent > c.find(x => x.label === 'generalist-3/pooled').keptPercent);
 });
 
 test('CLI: one line of JSON, exit 2 on errors, runs through a linked folder', () => {
