@@ -9,7 +9,7 @@
       "name": "council-dial",
       "source": "./plugin",
       "description": "Runs a review council of subagents in the configuration you choose and logs each run's type and results for comparison.",
-      "version": "1.0.0",
+      "version": "1.1.0",
       "category": "development"
     }
   ]

@@ -17,11 +17,12 @@ const TARGET = 'the diff of branch fix-parser: src/parser.mjs and its tests';
 
 test('every type gives the right steps and agent count', () => {
   const cases = [
-    [['--reviewers', 'specialised', '--combine', 'judged'], 'specialised-3/judged', ['review:3', 'combine:1'], 4],
+    [['--reviewers', 'specialised', '--combine', 'judged'], 'specialised-3/judged+appeal', ['review:3', 'combine:1', 'appeal:1'], 5],
+    [['--reviewers', 'specialised', '--combine', 'judged', '--no-appeal'], 'specialised-3/judged', ['review:3', 'combine:1'], 4],
     [['--reviewers', 'generalist', '--combine', 'pooled', '--n', '4'], 'generalist-4/pooled', ['review:4', 'combine:0'], 4],
     [['--reviewers', 'generalist', '--combine', 'consensus'], 'generalist-3/consensus', ['review:3', 'combine:0'], 3],
-    [['--reviewers', 'specialised', '--combine', 'judged', '--debate', '--baseline'], 'specialised-3/judged+debate', ['review:3', 'debate:3', 'combine:1', 'baseline:1'], 8],
-    [['--reviewers', 'generalist', '--combine', 'judged', '--sequential', '--n', '2'], 'generalist-2/judged+sequential', ['review:2', 'combine:1'], 3],
+    [['--reviewers', 'specialised', '--combine', 'judged', '--debate', '--baseline'], 'specialised-3/judged+debate+appeal', ['review:3', 'debate:3', 'combine:1', 'appeal:1', 'baseline:1'], 9],
+    [['--reviewers', 'generalist', '--combine', 'judged', '--sequential', '--n', '2'], 'generalist-2/judged+sequential+appeal', ['review:2', 'combine:1', 'appeal:1'], 4],
     [['--reviewers', 'specialised', '--combine', 'pooled', '--roles', 'accessibility, performance'], 'specialised-2 [accessibility, performance]/pooled', ['review:2', 'combine:0'], 2],
   ];
   for (const [args, label, steps, count] of cases) {
@@ -45,7 +46,7 @@ test('briefs carry the target, the rules and the format; sequential and consensu
   const g = buildPlan(parseArgs(['plan', '--reviewers', 'generalist', '--combine', 'judged', '--baseline']), TARGET);
   assert.match(g.steps[0].agents[1].brief, /reviewer 2 of 3/);
   assert.match(g.steps[1].agents[0].brief, /REAL, OVERSTATED .* or NOT REAL/);
-  assert.match(g.steps[2].how, /together with the reviewers.*never show it the council's reports/);
+  assert.match(g.steps.find(s => s.step === 'baseline').how, /together with the reviewers.*never show it the council's reports/);
 });
 
 test('bad options are refused', () => {
@@ -68,13 +69,13 @@ test('plan logs the type; log, update, list and compare work; the Markdown log i
   run(p, ['log', '--run', b.runId], JSON.stringify({ findingsPerReviewer: [6, 6, 5], findingsCombined: 14, confirmed: 6, dismissed: 5, wallMinutes: 6 }));
   run(p, ['update', '--run', a.runId], JSON.stringify({ fixesMade: 7, fixesFailedRecheck: 2, regressions: 1, newFindings: 1 }));
   const c = run(p, ['compare']).byType;
-  const judged = c.find(x => x.label === 'specialised-3/judged');
+  const judged = c.find(x => x.label === 'specialised-3/judged+appeal');
   assert.equal(judged.confirmedPercent, 78);
   assert.equal(judged.fixesFailedRecheckPercent, 29);
   assert.deepEqual(judged.baseline, { runs: 1, councilConfirmedPerRun: 7, baselineConfirmedPerRun: 3 });
   assert.equal(c.find(x => x.label === 'generalist-3/pooled').dismissedPercent, 36);
   const md = fs.readFileSync(path.join(p, 'reviews/review-log.md'), 'utf8');
-  assert.match(md, /\| specialised-3\/judged \| 1 \| 9 \| 78% \| 11% \| 12\.5 \| 29% \| 1 \| 7 vs 3 \(1 run\) \| 0 \| 0 \|/);
+  assert.match(md, /\| specialised-3\/judged\+appeal \| 1 \| 9 \| 78% \| 11% \| 12\.5 \| 29% \| 1 \| 7 vs 3 \(1 run\) \| - \| 0 \| 0 \|/);
   assert.match(md, /2 of 7/);
   const lines = fs.readFileSync(path.join(p, 'reviews/review-log.jsonl'), 'utf8').trim().split('\n');
   assert.equal(lines.length, 5, 'append-only: 2 plans, 2 results, 1 update');
@@ -101,7 +102,7 @@ test('text from the target and notes is cleaned, and the Markdown log can\'t be 
   assert.ok(!/^## Fake/m.test(md));
   assert.ok(!md.includes('<img') && !md.includes('![t]'));
   const row = md.split('\n').find(l => l.includes(a.runId));
-  assert.equal(row.split('|').length, 12, 'the table row keeps its columns');
+  assert.equal(row.split('|').length, 13, 'the table row keeps its columns');
 });
 
 test('the log folder must be a plain folder inside the project', () => {

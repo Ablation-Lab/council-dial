@@ -24,7 +24,7 @@ export function saveUsed(file, used) {
   fs.writeFileSync(file + '.slugs', used.join('\n')); // one slug per line
 }
 
-// Loads the list. The README says a missing file gives an empty list.
+// Loads the list of used slugs saved next to the given file.
 export function loadUsed(file) {
   return fs.readFileSync(file + '.slugs', 'utf8').split('\n'); // one slug per line
 }

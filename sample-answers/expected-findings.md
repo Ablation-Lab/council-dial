@@ -1,6 +1,6 @@
 # Expected findings for samples/target
 
-Problems planted on purpose in `target/slugify.mjs`, so you can see what each council type finds and misses. Compare what each council type reports with this list. Keep this file out of the folder you ask the council to review.
+Problems planted on purpose in `samples/target/slugify.mjs`, so you can see what each council type finds and misses. Compare what each council type reports with this list. This file is kept outside `samples/` so a council pointed at the sample can't read it; the sample's own README and comments don't say it has planted problems.
 
 | # | Where | Problem | Kind |
 |---|---|---|---|
@@ -10,8 +10,10 @@ Problems planted on purpose in `target/slugify.mjs`, so you can see what each co
 | 4 | `uniqueSlug`, line 17 | The first duplicate gets `-1`, but the README says `-2`. | correctness, docs |
 | 5 | `uniqueSlug` | An empty or all-symbol title gives an empty slug, which is used as is. | correctness |
 | 6 | `saveUsed`, line 24 | Not atomic: a crash mid-write leaves a partial list. | correctness |
-| 7 | `saveUsed`, line 24 | The path `file + '.slugs'` isn't checked, so a caller passing user input can write anywhere. | security |
+| 7 | `saveUsed`, line 24 | The path `file + '.slugs'` isn't checked, and the README says `file` is the blog name a user typed in, so a name like `../../x` writes outside the folder. | security |
 | 8 | `loadUsed`, line 29 | Throws when the file is missing, but the README says a missing file gives an empty list. | correctness, docs |
 | 9 | `loadUsed` | An empty file gives `['']`, so the empty slug counts as used. | correctness |
 
-The sample review log, `reviews/review-log.jsonl`, holds six made-up runs on this target of three types, for trying `compare`. Its numbers are invented to show the format, not results of real runs.
+Real findings that aren't planted, such as unchecked arguments or `uniqueSlug` changing the list it's given, aren't false positives; count them separately.
+
+The sample review log, `samples/reviews/review-log.jsonl`, holds six made-up runs on this target of three types, for trying `compare`. Its numbers are invented to show the format, not results of real runs.
