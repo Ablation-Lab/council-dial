@@ -46,7 +46,11 @@ const RUN_ID = /^[0-9]{8}-[0-9a-f]{4}$/;
 // The Agent tool's per-call model takes these aliases; a full model id (such as claude-opus-5-5)
 // names the main session's model, or a model set in CLAUDE_CODE_SUBAGENT_MODEL.
 export const MODEL_ALIASES = ['sonnet', 'opus', 'haiku', 'fable'];
-const MODEL_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,59}(\[1m\])?$/;
+// A Claude model id as Claude Code names it: claude-..., with an optional [1m] suffix for the
+// 1M-context variant. Only ids of this shape (or an alias) are recorded or read back as models, so a
+// planted value can't reach a type's name or setup's rerun command.
+export const CLAUDE_MODEL_ID = /^claude-[a-z0-9][a-z0-9.-]{0,58}(\[1m\])?$/;
+const isModelName = v => typeof v === 'string' && (MODEL_ALIASES.includes(v) || CLAUDE_MODEL_ID.test(v));
 export const STEPS = ['review', 'debate', 'combine', 'appeal', 'baseline'];
 // Effort levels Claude Code uses; CLAUDE_EFFORT holds the session's.
 export const EFFORT_LEVELS = ['low', 'medium', 'high', 'xhigh', 'max'];
@@ -84,7 +88,7 @@ export function parseArgs(argv) {
     if (o.roles != null && o.reviewers !== 'specialised') throw new Error('--roles is for specialised reviewers');
     if (o.noAppeal && o.combine !== 'judged') throw new Error('--no-appeal is for judged councils; only they have an appeal step');
     if (o.model != null && !MODEL_ALIASES.includes(o.model)) throw new Error(`--model must be ${MODEL_ALIASES.join(', ')} (the Agent tool takes only these aliases); leave it out to use this session's model`);
-    if (o.mainModel != null && !MODEL_ID.test(o.mainModel)) throw new Error('--main-model is the main session\'s model id, such as claude-opus-5-5');
+    if (o.mainModel != null && !CLAUDE_MODEL_ID.test(o.mainModel)) throw new Error('--main-model is the main session\'s model id, such as claude-opus-5-5 (it starts with claude- and may end in [1m])');
   } else if (o.n != null || o.roles != null || o.reviewers || o.combine || o.debate || o.sequential || o.baseline || o.noAppeal || o.model != null || o.mainModel != null) {
     throw new Error(`--n, --roles, --reviewers, --combine, --debate, --sequential, --baseline, --no-appeal, --model and --main-model are for estimate and plan only${cmd === 'list' ? ' (list takes --limit)' : ''}`);
   }
@@ -195,15 +199,19 @@ function parseRoles(raw) {
   for (const r of roles) if (SHELL_CHARS.test(r) || r.startsWith('-')) throw new Error(`a role can't start with "-" or contain quotation marks or shell characters: ${r}`);
   const seen = new Set();
   for (const r of roles) { if (seen.has(r.toLowerCase())) throw new Error(`role listed twice: ${r}`); seen.add(r.toLowerCase()); }
-  // Each reviewer's report is saved under a file name made from its role, so two roles that differ
-  // only in punctuation or non-ASCII letters would share one file.
-  const files = new Map();
-  for (const r of roles) {
-    const f = reportName(`reviewer: ${r}`);
-    if (files.has(f)) throw new Error(`roles "${files.get(f)}" and "${r}" would save their reports to the same file (${f}); name them so they differ in their letters a to z or digits`);
-    files.set(f, r);
-  }
   return roles;
+}
+// Each agent's report is saved under a file name made from its label, so two roles that differ only
+// in punctuation or non-ASCII letters would share one file, as would the roles "api" and "api debate"
+// in a council with a debate round (reviewer: api (debate) and reviewer: api debate). Checked over
+// every agent the type starts.
+function checkReportNames(type) {
+  const files = new Map();
+  for (const l of agentLabels(type)) {
+    const f = reportName(l);
+    if (files.has(f)) throw new Error(`"${files.get(f)}" and "${l}" would save their reports to the same file (${f}); name the roles so they differ in their letters a to z or digits`);
+    files.set(f, l);
+  }
 }
 
 // The type's name, always rebuilt from the type itself (never read back from the log), so every run of
@@ -223,7 +231,7 @@ export function labelOf(type) {
 export function resolveModels(o, env = {}) {
   const warnings = [];
   let envModel = env.CLAUDE_CODE_SUBAGENT_MODEL ? String(env.CLAUDE_CODE_SUBAGENT_MODEL).trim() : null;
-  if (envModel && envModel !== 'inherit' && !MODEL_ALIASES.includes(envModel) && !MODEL_ID.test(envModel)) { warnings.push('CLAUDE_CODE_SUBAGENT_MODEL is set to something Council Dial can\'t read as a model, so it isn\'t recorded'); envModel = null; }
+  if (envModel && envModel !== 'inherit' && !isModelName(envModel)) { warnings.push('CLAUDE_CODE_SUBAGENT_MODEL is set to something Council Dial can\'t read as a model (an alias, or a Claude model id such as claude-opus-5-5), so it isn\'t recorded'); envModel = null; }
   const envSets = !!envModel && envModel !== 'inherit';
   const force = envSets && ['1', 'true'].includes(String(env.CLAUDE_CODE_SUBAGENT_MODEL_FORCE ?? '').trim().toLowerCase());
   const main = o.mainModel ?? null;
@@ -247,9 +255,22 @@ export function councilType(o, env = {}) {
   if (n < 2 && (o.debate || o.combine === 'consensus')) throw new Error('debate and consensus need at least 2 reviewers');
   const { models, warnings: modelWarnings } = resolveModels(o, env);
   const type = { reviewers: o.reviewers, n, roles, combine: o.combine, debate: o.debate, sequential: o.sequential, baseline: o.baseline, appeal, models };
+  checkReportNames(type);
   return { type, label: labelOf(type), modelWarnings };
 }
 const agentTotal = type => Object.values(stepCounts(type)).reduce((s, x) => s + x, 0);
+// The agents a logged run had: every step's, and the appeal only if it ran.
+const agentsOf = (type, res) => ({ ...stepCounts(type), appeal: type.appeal && res?.appeal?.ran === true ? 1 : 0 });
+const agentsTotal = (type, res) => Object.values(agentsOf(type, res)).reduce((s, x) => s + x, 0);
+// Whether a results row lists exactly the agents the run had (one per seat, at its step). Tokens and
+// the critical path are worked out only from a complete list, so a run with an agent left out
+// doesn't look cheaper or quicker than it was.
+export function agentsComplete(type, res) {
+  const ag = res?.agents;
+  if (!ag?.length) return false;
+  const c = agentsOf(type, res);
+  return STEPS.every(s => ag.filter(a => a.step === s).length === c[s]);
+}
 
 // The session's effort level, from CLAUDE_EFFORT. Council Dial doesn't set effort; this records the
 // session's level as the plan saw it, not the level each subagent actually ran at, which isn't
@@ -358,7 +379,7 @@ function checkAgents(list) {
     if (!label) throw new Error(`agents[${i}].label needs the agent's label from the plan`);
     if (!STEPS.includes(x.step)) throw new Error(`agents[${i}].step must be ${STEPS.join(', ')}`);
     const model = x.model == null ? 'inherit' : String(x.model);
-    if (model !== 'inherit' && !MODEL_ALIASES.includes(model) && !MODEL_ID.test(model)) throw new Error(`agents[${i}].model must be inherit, ${MODEL_ALIASES.join(', ')} or a model id`);
+    if (model !== 'inherit' && !isModelName(model)) throw new Error(`agents[${i}].model must be inherit, ${MODEL_ALIASES.join(', ')} or a Claude model id such as claude-opus-5-5`);
     return { label, step: x.step, model, tokens: nint(x.tokens, `agents[${i}].tokens`), toolUses: nint(x.toolUses, `agents[${i}].toolUses`), durationMs: nint(x.durationMs, `agents[${i}].durationMs`) };
   });
 }
@@ -419,17 +440,18 @@ export function readLog(file) {
           else throw new Error('bad roles');
         }
         // Rows from version 1 have no appeal field: those runs had no appeal step.
-        // Rows before 1.2.0 have no models: those runs' models weren't recorded. Values that aren't
-        // model names are dropped, so a planted row can't put text into the type's name.
+        // Rows before 1.2.0 have no models: those runs' models weren't recorded. Only an alias or a
+        // Claude model id (claude-..., see CLAUDE_MODEL_ID) is read as a model; anything else is
+        // dropped, so a planted row can't put text into the type's name or setup's rerun command.
         const m = r.type.models && typeof r.type.models === 'object' ? r.type.models : null;
-        const mid = v => (typeof v === 'string' && MODEL_ID.test(v) ? v : null);
+        const mid = v => (typeof v === 'string' && CLAUDE_MODEL_ID.test(v) ? v : null);
         // The effective model is always one of the other three (see resolveModels), so any other
-        // value, even one shaped like a model id, is dropped.
+        // value is dropped too.
         let models = null;
         if (m) {
-          models = { main: mid(m.main), requested: MODEL_ALIASES.includes(m.requested) ? m.requested : null, env: m.env === 'inherit' ? 'inherit' : mid(m.env), force: m.force === true, effective: null };
-          const eff = mid(m.effective);
-          if (eff && eff !== 'inherit' && [models.requested, models.env, models.main].includes(eff)) models.effective = eff;
+          models = { main: mid(m.main), requested: MODEL_ALIASES.includes(m.requested) ? m.requested : null, env: m.env === 'inherit' ? 'inherit' : (MODEL_ALIASES.includes(m.env) ? m.env : mid(m.env)), force: m.force === true, effective: null };
+          const eff = isModelName(m.effective) ? m.effective : null;
+          if (eff && [models.requested, models.env, models.main].includes(eff)) models.effective = eff;
         }
         const type = { reviewers: r.type.reviewers, n: r.type.n, combine: r.type.combine, debate: !!r.type.debate, sequential: !!r.type.sequential, baseline: !!r.type.baseline, appeal: r.type.combine === 'judged' && r.type.appeal === true, roles, models };
         // The label is rebuilt from the type, never taken from the line, so a planted or cut label
@@ -461,9 +483,9 @@ export function runsFrom(rows) {
 
 const ratio = (a, b) => (b > 0 ? Math.round((a / b) * 100) : null);
 const one = v => Math.round(v * 10) / 10;
-// A run's total tokens, only when every listed agent's tokens were reported (null otherwise), so a run
-// with gaps doesn't look cheaper than it was.
-const runTokens = res => (res?.agents?.length && res.agents.every(x => x.tokens != null) ? res.agents.reduce((s, x) => s + x.tokens, 0) : null);
+// A run's total tokens, only when every agent the run had is listed with its tokens (null otherwise),
+// so a run with an agent left out, or with gaps, doesn't look cheaper than it was.
+const runTokens = (type, res) => (agentsComplete(type, res) && res.agents.every(x => x.tokens != null) ? res.agents.reduce((s, x) => s + x.tokens, 0) : null);
 // Kept findings are the ones that survive judging, REAL or OVERSTATED: an OVERSTATED finding is a real
 // problem rated too high, so it counts as found. How often the judge cut a kept finding's severity
 // is reported separately, as the overstated share of kept findings.
@@ -490,7 +512,7 @@ export function compare(runs) {
       g.appealRuns++; g.appealReviewed += a.reviewed; g.appealFlagged += a.items.length;
       g.appealReinstated += a.items.filter(x => x.call === 'reinstated').length; g.appealPending += a.items.filter(x => x.call === 'pending').length;
     }
-    const t = runTokens(res);
+    const t = runTokens(r.type, res);
     if (t != null) { g.tokenRuns++; g.tokens += t; }
     const ap = res.agents?.find(x => x.step === 'appeal' && x.tokens != null);
     if (ap) { g.appealTokenRuns++; g.appealTokens += ap.tokens; }
@@ -517,7 +539,7 @@ export function compare(runs) {
 export function estimateOf(runs, type, label) {
   const same = runs.filter(r => r.label === label);
   const logged = same.filter(r => r.results);
-  const counted = logged.map(r => ({ r, tokens: runTokens(r.results) })).filter(x => x.tokens != null);
+  const counted = logged.map(r => ({ r, tokens: runTokens(r.type, r.results) })).filter(x => x.tokens != null);
   const agentCount = agentTotal(type);
   const quick = type.reviewers === 'generalist' && type.combine === 'pooled' && type.n <= 3 && !type.debate && !type.baseline;
   const trial = `a smaller trial run first: ${quick ? '' : 'a Quick council (3 generalist reviewers, pooled), or '}this council on one part of the material, logged like any other run`;
@@ -546,13 +568,9 @@ const minutesText = (wall, crit, unlabelled) => [wall != null && `wall ${wall}`,
 // all of them one after another when sequential), then the slowest debate agent, the judge and the
 // appeal; the baseline runs alongside. Null unless every agent that ran is listed with a duration.
 export function criticalPathOf(type, res) {
-  const ag = res.agents;
-  if (!ag?.length || ag.some(a => a.durationMs == null)) return null;
-  const c = stepCounts(type);
-  const of = s => ag.filter(a => a.step === s).map(a => a.durationMs);
+  if (!agentsComplete(type, res) || res.agents.some(a => a.durationMs == null)) return null;
+  const of = s => res.agents.filter(a => a.step === s).map(a => a.durationMs);
   const [review, debate, combine, appeal, baseline] = STEPS.map(of);
-  const appealRan = type.appeal && res.appeal?.ran === true;
-  if (review.length !== c.review || debate.length !== c.debate || combine.length !== c.combine || baseline.length !== c.baseline || appeal.length !== (appealRan ? 1 : 0)) return null;
   const sum = xs => xs.reduce((s, x) => s + x, 0), max = xs => Math.max(0, ...xs);
   const ms = Math.max((type.sequential ? sum(review) : max(review)) + max(debate) + sum(combine) + sum(appeal), max(baseline));
   return ms > 0 ? Math.round(ms / 6000) / 10 : null;
@@ -568,8 +586,11 @@ function markdown(runs) {
     for (const r of runs) {
       const res = r.results, fx = r.updates.reduce((a, u) => ({ made: a.made + u.fixesMade, failed: a.failed + u.fixesFailedRecheck }), { made: 0, failed: 0 });
       const ap = r.type.appeal && res?.appeal ? (res.appeal.ran ? `${res.appeal.items.length} of ${res.appeal.reviewed} flagged, ${res.appeal.items.filter(x => x.call === 'reinstated').length} reinstated` : 'nothing dismissed') : '-';
+      // The tokens reported, marked "k of n agents" when fewer than the run's agents have them, whether
+      // an agent's tokens are missing or the agent was left out of the list.
       const known = res?.agents?.filter(x => x.tokens != null) ?? [];
-      const tok = known.length ? `${known.reduce((s, x) => s + x.tokens, 0)}${known.length < res.agents.length ? ` (${known.length} of ${res.agents.length} agents)` : ''}` : '-';
+      const had = res ? agentsTotal(r.type, res) : 0;
+      const tok = known.length ? `${known.reduce((s, x) => s + x.tokens, 0)}${known.length < had ? ` (${known.length} of ${had} agents)` : ''}` : '-';
       const min = res ? minutesText(res.wallMinutes, res.criticalPathMinutes, res.unlabelledMinutes) : '-';
       const found = res ? `${res.findingsCombined}${r.resultsLogged > 1 ? ' (re-logged)' : ''}` : 'not logged';
       L.push(`| ${r.runId} | ${cell(r.time.slice(0, 10))} | ${cell(r.label)} | ${cell(r.target)} | ${found} | ${res ? (res.verified ? `${kept(res)} (${res.overstated})` : 'unverified') : '-'} | ${res ? (res.verified ? res.dismissed : '-') : '-'} | ${min} | ${tok} | ${r.updates.length ? `${fx.failed} of ${fx.made}` : '-'} | ${res?.baseline ? res.baseline.confirmed : '-'} | ${ap} |`);
@@ -585,7 +606,7 @@ function markdown(runs) {
     L.push('| Type | Runs | Findings per run | Kept | Dismissed | Kept but severity cut | Minutes per run | Tokens per run (appeal agent) | Fixes that failed recheck | Regressions per rechecked run | Council kept vs baseline confirmed (per run) | Appeal: dismissals flagged, reinstated | Unverified runs | Planned, not logged |', '|---|---|---|---|---|---|---|---|---|---|---|---|---|---|');
     for (const g of c) L.push(`| ${cell(g.label)} | ${g.runs} | ${dash(g.findingsPerRun)} | ${pct(g.keptPercent)} | ${pct(g.dismissedPercent)} | ${pct(g.overstatedOfKeptPercent)} | ${minCell(g.minutes)} | ${g.tokensPerRun == null ? '-' : `${g.tokensPerRun}${g.appealTokensPerRun != null ? ` (${g.appealTokensPerRun})` : ''}`} | ${pct(g.fixesFailedRecheckPercent)} | ${dash(g.regressionsPerRecheckedRun)} | ${g.baseline ? `${g.baseline.councilKeptPerRun} vs ${g.baseline.baselineConfirmedPerRun} (${runsOf(g.baseline.runs)})` : '-'} | ${g.appeal ? `${g.appeal.flagged} of ${g.appeal.dismissedChecked}, ${g.appeal.reinstated} reinstated${g.appeal.pending ? `, ${g.appeal.pending} pending` : ''}` : '-'} | ${g.unverifiedRuns} | ${g.unfinishedRuns} |`);
     if (c.more) L.push('', `(${c.more} more types not shown.)`);
-    L.push('', 'Kept is the share of combined findings that survived checking, REAL or OVERSTATED (an OVERSTATED finding is a real problem rated too high); dismissed is the share marked NOT REAL. Kept but severity cut is the share of kept findings marked OVERSTATED, which shows how far the reviewers\' severities had to be corrected. All three count only verified runs.', '', 'Minutes are of two kinds and never averaged together: wall time, from the start to when the last agent finished, and the critical path, worked out from the agents\' reported times (the slowest reviewer, then each later step), which leaves out Claude\'s own time between steps. Minutes logged before Council Dial 1.3.0 are unlabelled, because they could be either; logging the run again labels them.', '', 'Tokens per run count only runs where Claude Code reported every agent\'s tokens. A type ending in @ and a model was run on that model (as asked for; Claude Code doesn\'t report the model a subagent actually ran on to the main session). Small numbers of runs say little; compare types on the same kind of target.', '', 'Where a run\'s reports were saved, they are in the folder named by its run id, next to this file. Finding numbers restart in every run, so cite them with the run id, such as 20261107-2f23/M12.', '');
+    L.push('', 'Kept is the share of combined findings that survived checking, REAL or OVERSTATED (an OVERSTATED finding is a real problem rated too high); dismissed is the share marked NOT REAL. Kept but severity cut is the share of kept findings marked OVERSTATED, which shows how far the reviewers\' severities had to be corrected. All three count only verified runs. The baseline\'s findings are counted confirmed or not, with no OVERSTATED bucket, so a real baseline finding counts as confirmed even if its severity was too high; its confirmed count is the counterpart of the council\'s kept count.', '', 'Minutes are of two kinds and never averaged together: wall time, from the start to when the last agent finished, and the critical path, worked out from the agents\' reported times (the slowest reviewer, then each later step), which leaves out Claude\'s own time between steps. Minutes logged before Council Dial 1.3.0 are unlabelled, because they could be either; logging the run again labels them.', '', 'Tokens per run count only runs where every agent the run had is listed with the tokens Claude Code reported for it. A type ending in @ and a model was run on that model (as asked for; Claude Code doesn\'t report the model a subagent actually ran on to the main session). Small numbers of runs say little; compare types on the same kind of target.', '', 'Where a run\'s reports were saved, they are in the folder named by its run id, next to this file. Finding numbers restart in every run, so cite them with the run id, such as 20261107-2f23/M12.', '');
   }
   return L.join('\n');
 }
@@ -660,15 +681,19 @@ const savedReports = (p, runId) => { try { return fs.readdirSync(path.join(p.dir
 export function setupOf(run) {
   const t = run.type, notes = [];
   const def = t.reviewers === 'specialised' && t.roles && t.roles.map(r => r.toLowerCase()).sort().join('|') === [...DEFAULT_ROLES].sort().join('|');
-  const args = ['plan', '--reviewers', t.reviewers, '--combine', t.combine];
-  if (t.reviewers === 'specialised' && !def) args.push('--roles', `'${t.roles.join(', ')}'`);
-  if (t.reviewers === 'generalist') args.push('--n', String(t.n));
+  // Every value is single-quoted, so the command is safe to paste into bash or zsh as it stands: a
+  // model id such as claude-opus-5-5[1m] would otherwise be a glob. No value can contain a quote
+  // (roles and model ids are checked for that when planned and when read).
+  const q = v => `'${v}'`;
+  const args = ['plan', '--reviewers', q(t.reviewers), '--combine', q(t.combine)];
+  if (t.reviewers === 'specialised' && !def) args.push('--roles', q(t.roles.join(', ')));
+  if (t.reviewers === 'generalist') args.push('--n', q(t.n));
   if (t.debate) args.push('--debate');
   if (t.sequential) args.push('--sequential');
   if (t.baseline) args.push('--baseline');
   if (t.combine === 'judged' && !t.appeal) args.push('--no-appeal');
-  if (t.models?.requested) args.push('--model', t.models.requested);
-  if (t.models?.main) args.push('--main-model', t.models.main);
+  if (t.models?.requested) args.push('--model', q(t.models.requested));
+  if (t.models?.main) args.push('--main-model', q(t.models.main));
   // Runs planned before 1.2.0 didn't record Council Dial's version; each brief version and model
   // record belongs to one release, so it can be told from them.
   const version = run.councilDial ?? (run.version === 1 ? '1.0.0' : t.models ? '1.2.0' : '1.1.0');

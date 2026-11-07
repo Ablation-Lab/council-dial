@@ -87,14 +87,15 @@ test('setup gives a run\'s exact setup and the command to rerun it', () => {
   assert.deepEqual(s.councilDial, { version: PLUGIN_VERSION, source: 'recorded' });
   assert.equal(s.briefVersion, VERSION);
   assert.equal(s.target, T);
-  assert.equal(s.rerun, `node "<skill folder>/scripts/council.mjs" plan --reviewers specialised --combine judged --roles 'performance, accessibility' --debate --model sonnet --main-model claude-opus-5-5 --project '<project root>'`);
+  assert.equal(s.rerun, `node "<skill folder>/scripts/council.mjs" plan --reviewers 'specialised' --combine 'judged' --roles 'performance, accessibility' --debate --model 'sonnet' --main-model 'claude-opus-5-5' --project '<project root>'`);
   assert.match(s.notes.join(' '), /keep this order/);
   const b = run(p, ['plan', '--reviewers', 'generalist', '--combine', 'judged', '--n', '2', '--no-appeal', '--baseline', '--main-model', 'claude-opus-5-5'], T);
   const sb = run(p, ['setup', '--run', b.runId]);
-  assert.match(sb.rerun, /plan --reviewers generalist --combine judged --n 2 --baseline --no-appeal --main-model claude-opus-5-5 /);
+  assert.match(sb.rerun, /plan --reviewers 'generalist' --combine 'judged' --n '2' --baseline --no-appeal --main-model 'claude-opus-5-5' /);
   assert.match(sb.notes.join(' '), /inherited the main session's model \(claude-opus-5-5\)/);
-  // The rerun command, run as given, plans the same type.
-  const again = spawnSync(process.execPath, [SCRIPT, ...sb.rerun.split(' --project')[0].replace(/^node "<skill folder>\/scripts\/council\.mjs" /, '').split(' '), '--project', p], { input: T, encoding: 'utf8', env: { ...process.env, CLAUDE_CODE_SUBAGENT_MODEL: '' } });
+  // The rerun command, run as given (its values are single-quoted, as a shell would read them), plans the same type.
+  const argv = [...sb.rerun.split(' --project')[0].replace(/^node "<skill folder>\/scripts\/council\.mjs" /, '').matchAll(/'([^']*)'|(\S+)/g)].map(m => m[1] ?? m[2]);
+  const again = spawnSync(process.execPath, [SCRIPT, ...argv, '--project', p], { input: T, encoding: 'utf8', env: { ...process.env, CLAUDE_CODE_SUBAGENT_MODEL: '' } });
   assert.equal(JSON.parse(again.stdout).label, run(p, ['list']).runs.find(r => r.runId === b.runId).label);
 });
 
@@ -107,7 +108,7 @@ test('setup for runs planned before 1.2.0: the version is inferred and the diffe
   const s1 = run(p, ['setup', '--run', '20261107-f675']);
   assert.deepEqual(s1.councilDial, { version: '1.0.0', source: 'inferred (planned before Council Dial recorded its version)' });
   assert.match(s1.notes.join(' '), /would now be refused/);
-  assert.match(s1.rerun, /plan --reviewers specialised --combine judged --no-appeal --project/);
+  assert.match(s1.rerun, /plan --reviewers 'specialised' --combine 'judged' --no-appeal --project/);
   assert.match(s1.notes.join(' '), /brief version 1.*Install Council Dial 1\.0\.0 to rerun it exactly/);
   assert.match(s1.notes.join(' '), /models weren't recorded/);
   assert.equal(run(p, ['setup', '--run', '20261107-0011']).councilDial.version, '1.1.0');
