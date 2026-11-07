@@ -104,7 +104,7 @@ test('J7/J22: consensus is a real majority; debate and consensus need two review
   assert.deepEqual([2, 3, 4, 5, 6].map(at), ['2', '2', '3', '3', '4']);
   assert.throws(() => buildPlan(parseArgs(['plan', '--reviewers', 'generalist', '--combine', 'consensus', '--n', '1']), T), /at least 2/);
   assert.throws(() => buildPlan(parseArgs(['plan', '--reviewers', 'generalist', '--combine', 'pooled', '--debate', '--n', '1']), T), /at least 2/);
-  assert.equal(buildPlan(parseArgs(['plan', '--reviewers', 'specialised', '--combine', 'consensus']), T).warnings.length, 1);
+  assert.equal(buildPlan(parseArgs(['plan', '--reviewers', 'specialised', '--combine', 'consensus', '--main-model', 'claude-opus-5-5']), T).warnings.length, 1);
   const solo = buildPlan(parseArgs(['plan', '--reviewers', 'generalist', '--combine', 'pooled', '--n', '1']), T);
   assert.ok(!/other reviewers/i.test(solo.steps[0].agents[0].brief));
 });

@@ -75,7 +75,7 @@ test('plan logs the type; log, update, list and compare work; the Markdown log i
   assert.deepEqual(judged.baseline, { runs: 1, councilConfirmedPerRun: 7, baselineConfirmedPerRun: 3 });
   assert.equal(c.find(x => x.label === 'generalist-3/pooled').dismissedPercent, 36);
   const md = fs.readFileSync(path.join(p, 'reviews/review-log.md'), 'utf8');
-  assert.match(md, /\| specialised-3\/judged\+appeal \| 1 \| 9 \| 78% \| 11% \| 12\.5 \| 29% \| 1 \| 7 vs 3 \(1 run\) \| - \| 0 \| 0 \|/);
+  assert.match(md, /\| specialised-3\/judged\+appeal \| 1 \| 9 \| 78% \| 11% \| 12\.5 \| - \| 29% \| 1 \| 7 vs 3 \(1 run\) \| - \| 0 \| 0 \|/);
   assert.match(md, /2 of 7/);
   const lines = fs.readFileSync(path.join(p, 'reviews/review-log.jsonl'), 'utf8').trim().split('\n');
   assert.equal(lines.length, 5, 'append-only: 2 plans, 2 results, 1 update');
@@ -102,7 +102,7 @@ test('text from the target and notes is cleaned, and the Markdown log can\'t be 
   assert.ok(!/^## Fake/m.test(md));
   assert.ok(!md.includes('<img') && !md.includes('![t]'));
   const row = md.split('\n').find(l => l.includes(a.runId));
-  assert.equal(row.split('|').length, 13, 'the table row keeps its columns');
+  assert.equal(row.split('|').length, 14, 'the table row keeps its columns');
 });
 
 test('the log folder must be a plain folder inside the project', () => {
