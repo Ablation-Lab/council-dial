@@ -149,3 +149,34 @@ test('R4: two agents with the same label get an error that says so, not one that
   assert.throws(() => plan(['--debate']), /two agents would both have the label "reviewer: 1 \(debate\)"/);
   assert.equal(plan([]).agentCount, 2, 'without a debate round the labels differ');
 });
+
+test('the appeal agent\'s tokens count only from runs whose total counts, as tokens per run do', () => {
+  const p = tmp();
+  const APPEAL = agent('appeal', 'appeal', 30000, 20000);
+  // Complete: the three reviewers, the judge and the appeal agent that ran.
+  const a = run(p, [...STD], T);
+  run(p, ['log', '--run', a.runId], JSON.stringify({ findingsCombined: 5, confirmed: 5, verified: true, agents: [...REVIEWERS, JUDGE, APPEAL], appeal: { ran: true, reviewed: 0, items: [] } }));
+  // Not complete: the judge is left out, so neither this run's total nor its appeal agent counts.
+  const b = run(p, [...STD], T);
+  run(p, ['log', '--run', b.runId], JSON.stringify({ findingsCombined: 5, confirmed: 5, verified: true, agents: [...REVIEWERS, agent('appeal', 'appeal', 90000, 20000)], appeal: { ran: true, reviewed: 0, items: [] } }));
+  let g = run(p, ['compare']).byType[0];
+  assert.deepEqual([g.tokensPerRun, g.tokenRuns, g.appealTokensPerRun], [210000, 1, 30000]);
+  // Not complete either: the judge has no tokens.
+  const c = run(p, [...STD], T);
+  run(p, ['log', '--run', c.runId], JSON.stringify({ findingsCombined: 5, confirmed: 5, verified: true, agents: [...REVIEWERS, agent('judge', 'combine', null, 1000), agent('appeal', 'appeal', 90000, 20000)], appeal: { ran: true, reviewed: 0, items: [] } }));
+  g = run(p, ['compare']).byType[0];
+  assert.deepEqual([g.tokensPerRun, g.tokenRuns, g.appealTokensPerRun], [210000, 1, 30000]);
+  assert.match(md(p), /\| 210000 \(30000\) \|/);
+});
+
+test('Bedrock and Vertex: SKILL.md says when to leave --main-model out, and both READMEs say the main model isn\'t recorded there', () => {
+  assert.match(fs.readFileSync(path.join(ROOT, 'plugin/skills/council-dial/SKILL.md'), 'utf8'), /only when that id starts with `claude-`.*leave `--main-model` out of `estimate` and `plan`.*tell the user so/);
+  for (const f of ['README.md', 'plugin/README.md']) {
+    const t = fs.readFileSync(path.join(ROOT, f), 'utf8');
+    assert.match(t, /Claude leaves `--main-model` out, plans the run without recording the main model, and tells you so/, f);
+    assert.match(t, /On Bedrock or Vertex, the main session's model id isn't recorded/, f);
+  }
+  // The script's check is unchanged: such ids are still refused, and a plan without --main-model works.
+  for (const id of ['us.anthropic.claude-opus-5-5-v1:0', 'claude-opus-5-5@20261001']) assert.throws(() => parseArgs([...STD.slice(0, 5), '--main-model', id]), /starts with claude-/);
+  assert.equal(run(tmp(), STD.slice(0, 5), T).type.models.main, null);
+});

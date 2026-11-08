@@ -133,6 +133,7 @@ Council Dial has no server, account or telemetry and sends nothing anywhere itse
 - Wall time depends on load as well as the type, and the critical path depends on the durations Claude Code reports; the two are kept apart, but a type may have one and not the other (see [Models, tokens and time](#models-tokens-and-time)).
 - The token estimate is the average of earlier runs of the same type, whatever material they reviewed: Council Dial doesn't record the material's size, so it can't scale the estimate to it.
 - The same model can appear under two type names: `@opus` when a run asked for the alias, and `@claude-opus-5-5` when the subagents inherited the session's model. Such runs are compared, and estimated, apart.
+- On Bedrock or Vertex, the main session's model id isn't recorded, because the script accepts only ids of the form `claude-…`. A run there whose subagents inherit the session's model has no model in its type's name, so it is compared, and estimated, together with other runs whose model wasn't recorded, whatever model they ran on.
 - Finding numbers (a reviewer's 1, 2, 3, the judge's M1, M2) restart in every run, so Council Dial cites them with the run id, such as `20261107-2f23/M12`.
 - Debate is one round, and sequential runs take longer by design.
 - Subagents can fail or stop early; the run is logged with what came back.
@@ -160,7 +161,7 @@ None of this is in Council Dial yet, and whether it's built depends on what the 
 - **"no planned run":** the run id is wrong, or the log is in another folder; run `list`, or pass the same `--log-dir` as when it was planned.
 - **"findingsPerReviewer has N numbers":** give one number per reviewer in the plan's order.
 - **"has no results logged yet":** log the run's results before adding a recheck.
-- **"--main-model is the main session's model id":** give the id as Claude Code names it, starting `claude-` (such as `claude-opus-5-5`, or `claude-opus-5-5[1m]`); a Bedrock or Vertex prefix isn't accepted.
+- **"--main-model is the main session's model id":** the script takes only an id as Claude Code names it on Anthropic's API, starting `claude-` (such as `claude-opus-5-5`, or `claude-opus-5-5[1m]`). A Bedrock id (such as `us.anthropic.claude-opus-5-5-v1:0`) or a Vertex id (such as `claude-opus-5-5@20261001`) isn't accepted, so Claude leaves `--main-model` out, plans the run without recording the main model, and tells you so.
 - **"node" isn't found:** install Node.js 18 or later.
 
 ## Support
