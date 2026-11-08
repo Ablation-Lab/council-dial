@@ -246,6 +246,28 @@ liteTest('SKILL.md keeps reports saved by their agents and checked, findings cop
   assert.match(skill, /The briefs\/ folder is a copy of plugin\/skills\/council-dial\/briefs\/ in Ablation-Lab\/council-dial and must stay byte-identical to it/);
 });
 
+liteTest('Lite 1.1.2 takes on what the appeal stress-test run showed, where it applies', () => {
+  const skill = readLite('skills/council-dial-lite/SKILL.md');
+  // Exclusions go in the description every brief gets.
+  assert.match(skill, /If anything next to it is out of scope, such as a folder of sample data, say so in the same line, .*: this line is the only description of the target the briefs get, so an exclusion you only tell the user doesn't reach the agents\./);
+  // Nothing added to a prompt; any departure logged with its exact text.
+  assert.match(skill, /Add nothing else to any prompt: no notes about the material, no instructions on numbering or format, and never a file path in place of a report\./);
+  assert.match(skill, /If you do add or change anything, log it in `deviations` with the exact text and why\./);
+  assert.match(skill, /with the exact text of anything you added to or changed in a prompt/);
+  // Escaped characters turned back when saving too, and recorded per agent.
+  assert.match(skill, /read them as the characters they stand for when you compare, copy or save it, and set the agent's `replyUnescaped` to `true` \(otherwise `false`\)\./);
+  const json = JSON.parse(skill.match(/\*\*run\.json\.\*\* Write it with this shape[^\n]*\n\n```json\n([\s\S]*?)\n```/)[1]);
+  assert.ok(Object.hasOwn(json.agents[0], 'replyUnescaped'));
+  // Every severity change flagged by Claude, up or down; the judge brief stays the shared one.
+  assert.match(skill, /list every one that differs, up or down, including where reviewers disagreed and the judge took one of their ratings: its citation, each reviewer's severity, the judge's, and the judge's reason, quoted, if it gave one/);
+  assert.match(skill, /- `severityChanges`: for judged, the list from section 7/);
+  // Durations are wall-clock, approvals included.
+  assert.match(skill, /`durationMs` is wall-clock time: in Manual mode it includes any time the agent waited for the user to approve a permission prompt, so it isn't pure model time\. Say so whenever you show times or critical paths\./);
+  const readme = readLite('README.md');
+  assert.match(readme, /wall-clock time, which in Manual mode includes any wait for your approval of a permission prompt, so it isn't pure model time/);
+  assert.match(readme, /Anything you want left out, such as a folder of sample data, goes in the one-line description of what's reviewed/);
+});
+
 liteTest('the manifest names it the lighter edition, links the full one plainly, and matches its own marketplace', () => {
   const lite = JSON.parse(readLite('.claude-plugin/plugin.json'));
   const full = JSON.parse(read('plugin/.claude-plugin/plugin.json'));

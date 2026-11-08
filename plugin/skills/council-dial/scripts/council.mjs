@@ -8,8 +8,10 @@
 //   node council.mjs estimate (the same type options as plan; writes nothing)
 //   node council.mjs log     --run <id> [--log-dir reviews] [--project <dir>]  (results JSON on stdin)
 //   node council.mjs update  --run <id> [--log-dir reviews] [--project <dir>]  (recheck JSON on stdin)
-//   node council.mjs report  --run <id> --agent <label> [--replace] [--saved-later]
+//   node council.mjs report  --run <id> --agent <label> [--replace] [--saved-later] [--notice-escaped]
 //                            [--log-dir reviews] [--project <dir>]          (the report on stdin)
+// plan, log, update and report also take --input <file>, which reads that file instead of stdin: the
+// standard way, since Claude writes the text with its Write tool and no shell quoting is involved.
 //   node council.mjs setup   --run <id> [--log-dir reviews] [--project <dir>]
 //   node council.mjs list    [--limit 10] [--log-dir reviews] [--project <dir>]
 //   node council.mjs compare [--log-dir reviews] [--project <dir>]
@@ -34,7 +36,7 @@ import { fileURLToPath } from 'node:url';
 export const VERSION = 2;
 // Council Dial's own version, recorded with each plan so a run's setup can be rebuilt exactly. Keep it
 // equal to the plugin manifest's version (a test checks).
-export const PLUGIN_VERSION = '1.3.8';
+export const PLUGIN_VERSION = '1.3.9';
 const COMMANDS = ['plan', 'estimate', 'log', 'update', 'report', 'setup', 'list', 'compare'];
 // The description of what's reviewed is kept at this length when planned and when read back.
 export const TARGET_MAX = 600;
@@ -67,7 +69,7 @@ const MAX_GROUPS = 50;
 
 export function parseArgs(argv) {
   const [cmd, ...rest] = argv;
-  const o = { cmd, reviewers: null, combine: null, n: null, roles: null, debate: false, sequential: false, baseline: false, noAppeal: false, model: null, mainModel: null, agent: null, replace: false, savedLater: false, logDir: 'reviews', project: null, run: null, limit: 10 };
+  const o = { cmd, reviewers: null, combine: null, n: null, roles: null, debate: false, sequential: false, baseline: false, noAppeal: false, model: null, mainModel: null, agent: null, replace: false, savedLater: false, noticeEscaped: false, input: null, logDir: 'reviews', project: null, run: null, limit: 10 };
   for (let i = 0; i < rest.length; i++) {
     const a = rest[i];
     const val = () => { const v = rest[++i]; if (v == null || v.startsWith('--')) throw new Error(`${a} needs a value`); return v; };
@@ -84,6 +86,8 @@ export function parseArgs(argv) {
     else if (a === '--agent') o.agent = val();
     else if (a === '--replace') o.replace = true;
     else if (a === '--saved-later') o.savedLater = true;
+    else if (a === '--notice-escaped') o.noticeEscaped = true;
+    else if (a === '--input') o.input = val();
     else if (a === '--log-dir') o.logDir = val();
     else if (a === '--project') o.project = val();
     else if (a === '--run') o.run = val();
@@ -110,7 +114,8 @@ export function parseArgs(argv) {
   if (!Number.isInteger(o.limit) || o.limit < 1 || o.limit > 500) throw new Error('--limit must be a whole number from 1 to 500');
   if (['log', 'update', 'report', 'setup'].includes(cmd) && !o.run) throw new Error('give --run with the id from plan');
   if (cmd === 'report' && !o.agent) throw new Error('give --agent with the agent\'s label from the plan, such as "reviewer: correctness" or "judge"');
-  if (cmd !== 'report' && (o.agent != null || o.replace || o.savedLater)) throw new Error('--agent, --replace and --saved-later are for report only');
+  if (cmd !== 'report' && (o.agent != null || o.replace || o.savedLater || o.noticeEscaped)) throw new Error('--agent, --replace, --saved-later and --notice-escaped are for report only');
+  if (o.input != null && !['plan', 'log', 'update', 'report'].includes(cmd)) throw new Error('--input is for plan, log, update and report, which read their input from it');
   return o;
 }
 
@@ -381,8 +386,8 @@ export function buildPlan(o, target, now = new Date(), usedIds = new Set(), env 
     agentCount, agentModel: o.model ?? null, steps, warnings,
     resultsTemplate: {
       findingsPerReviewer: reviewers.map(() => 0), findingsCombined: 0, confirmed: 0, overstated: 0, dismissed: 0, verified: null, severity: { high: 0, med: 0, low: 0 }, baseline: o.baseline ? { findings: 0, confirmed: 0, alsoFoundByCouncil: 0 } : null, appeal: appeal ? { ran: false, reviewed: 0, items: [] } : null,
-      agents: steps.flatMap(s => s.agents.map(a => ({ label: a.label, step: s.step, model: o.model ?? 'inherit', tokens: null, toolUses: null, durationMs: null }))),
-      wallMinutes: null, notes: '',
+      agents: steps.flatMap(s => s.agents.map(a => ({ label: a.label, step: s.step, model: o.model ?? 'inherit', effort: null, tokens: null, toolUses: null, durationMs: null }))),
+      severityChanges: o.combine === 'judged' ? [] : null, deviations: [], wallMinutes: null, notes: '',
     },
   };
 }
@@ -393,6 +398,74 @@ const num = (v, what) => { if (v == null) return 0; if (typeof v !== 'number' ||
 
 // strict (when writing): the counts must add up. Reading an existing log checks only that the values
 // are well formed, so rows written by an earlier version aren't lost.
+// --input <file>: the text Claude wrote with its Write tool, read as UTF-8. Only a plain file (not a
+// link, a folder or a device) of at most 4 MB is read; nothing else about the file is used.
+export const MAX_INPUT_BYTES = 4 * 1024 * 1024;
+export function readInputFile(file) {
+  const f = path.resolve(String(file));
+  let st; try { st = fs.lstatSync(f); } catch (e) { if (e.code === 'ENOENT') throw new Error(`--input: there's no file at ${f}`); throw e; }
+  if (st.isSymbolicLink()) throw new Error('--input is a link; give the file itself');
+  if (!st.isFile()) throw new Error('--input must be a file');
+  if (st.size > MAX_INPUT_BYTES) throw new Error(`--input is ${st.size} bytes; the most Council Dial reads is ${MAX_INPUT_BYTES}`);
+  return fs.readFileSync(f, 'utf8').replace(/^\uFEFF/, '');
+}
+// A background agent's completion notice can show <, > and & as &lt;, &gt; and &amp;. With
+// --notice-escaped, report turns those three back into the characters, in one pass, so &amp;lt; becomes
+// &lt; as the agent wrote it, and says so in the report's header; log then records it for the agent.
+export const UNESCAPED_NOTE = 'Its text came from a completion notice that showed <, > and & as &lt;, &gt; and &amp;; Council Dial turned';
+export function unescapeNotice(text) {
+  let count = 0;
+  const out = String(text ?? '').replace(/&(lt|gt|amp);/g, (_, e) => { count++; return e === 'lt' ? '<' : e === 'gt' ? '>' : '&'; });
+  return { text: out, count };
+}
+const looksEscaped = t => /&(lt|gt|amp);/.test(t) && !/[<>]/.test(t);
+
+// Severity changes: for each merged finding whose final severity differs from at least one reviewer's,
+// Claude lists the reviewers' severities, the judge's, and the judge's reason when it gave one (the
+// judge brief doesn't ask it to). log works out which way it went.
+export const SEVERITIES = ['low', 'med', 'high'];
+const sevOf = (v, what) => { const k = String(v ?? '').trim().toLowerCase().replace(/^medium$/, 'med'); if (!SEVERITIES.includes(k)) throw new Error(`${what} must be HIGH, MED or LOW`); return k; };
+export function severityChangeOf(reviewers, judge) {
+  const r = reviewers.map(x => SEVERITIES.indexOf(x)), j = SEVERITIES.indexOf(judge), lo = Math.min(...r), hi = Math.max(...r);
+  if (lo === hi && j === hi) return null;
+  if (j > hi) return 'raised above every reviewer';
+  if (j < lo) return 'lowered below every reviewer';
+  if (j === hi) return 'took the highest reviewer severity';
+  if (j === lo) return 'took the lowest reviewer severity';
+  return 'between the reviewers\' severities';
+}
+function checkSeverityChanges(list) {
+  if (list == null) return null;
+  if (!Array.isArray(list)) throw new Error('severityChanges must be a list, one entry per merged finding whose severity differs from any reviewer\'s');
+  if (list.length > 50) throw new Error('severityChanges can have at most 50 entries');
+  return list.map((x, i) => {
+    if (!x || typeof x !== 'object' || Array.isArray(x)) throw new Error(`severityChanges[${i}] must be an object: {"finding": "<run id>/M4", "reviewers": ["MED", "HIGH"], "judge": "HIGH", "reason": "<the judge's reason, or null>"}`);
+    const finding = clean(x.finding, 120);
+    if (!finding) throw new Error(`severityChanges[${i}].finding needs the finding's citation, such as <run id>/M4`);
+    if (!Array.isArray(x.reviewers) || !x.reviewers.length || x.reviewers.length > 9) throw new Error(`severityChanges[${i}].reviewers must list each reviewer's severity for it (1 to 9)`);
+    const reviewers = x.reviewers.map((v, k) => sevOf(v, `severityChanges[${i}].reviewers[${k}]`));
+    const judge = sevOf(x.judge, `severityChanges[${i}].judge`);
+    const change = severityChangeOf(reviewers, judge);
+    if (!change) throw new Error(`severityChanges[${i}] isn't a change: every reviewer and the judge gave ${judge.toUpperCase()}`);
+    const reason = x.reason == null ? null : clean(x.reason, 400) || null;
+    return { finding, reviewers, judge, change, reason };
+  });
+}
+// Deviations: anything Claude did differently from SKILL.md, such as text added to an agent's prompt or
+// a report passed another way, each with the exact text it added or changed.
+function checkDeviations(list) {
+  if (list == null) return null;
+  if (!Array.isArray(list)) throw new Error('deviations must be a list of strings, one per departure from SKILL.md, each with the exact text added or changed');
+  if (list.length > 20) throw new Error('deviations can have at most 20 entries');
+  return list.map((x, i) => {
+    if (typeof x !== 'string') throw new Error(`deviations[${i}] must be a string`);
+    const t = x.replace(/\r\n?/g, '\n').replace(/[^\P{Cc}\n\t]/gu, '').replace(HIDDEN, '').trim();
+    if (!t) throw new Error(`deviations[${i}] is empty`);
+    if (t.length > 2000) throw new Error(`deviations[${i}] is ${t.length} characters; the most is 2000`);
+    return t;
+  });
+}
+
 export function checkResults(r, strict = true) {
   if (!r || typeof r !== 'object' || Array.isArray(r)) throw new Error('give the results as a JSON object on stdin (the plan\'s resultsTemplate shows the fields)');
   if (r.findingsPerReviewer != null && !Array.isArray(r.findingsPerReviewer)) throw new Error('findingsPerReviewer must be a list of numbers');
@@ -402,7 +475,9 @@ export function checkResults(r, strict = true) {
     severity: { high: int(r.severity?.high, 'severity.high'), med: int(r.severity?.med, 'severity.med'), low: int(r.severity?.low, 'severity.low') },
     baseline: r.baseline && typeof r.baseline === 'object' ? { findings: int(r.baseline.findings, 'baseline.findings'), confirmed: int(r.baseline.confirmed, 'baseline.confirmed'), alsoFoundByCouncil: int(r.baseline.alsoFoundByCouncil, 'baseline.alsoFoundByCouncil') } : null,
     appeal: checkAppeal(r.appeal),
-    agents: checkAgents(r.agents),
+    agents: checkAgents(r.agents, strict),
+    severityChanges: checkSeverityChanges(r.severityChanges),
+    deviations: checkDeviations(r.deviations),
     notes: notesOf(r.notes, strict),
   };
   // Minutes come in two labelled measures: wallMinutes (wall time, from the start to when the last
@@ -437,7 +512,16 @@ export function checkResults(r, strict = true) {
 // Each subagent that ran: its seat, the model asked for, and the tokens, tool uses and time Claude
 // Code reported for it (null where nothing was reported).
 const nint = (v, what) => (v == null ? null : int(v, what, 1e10));
-function checkAgents(list) {
+// A seat's effort as log records it: the level Claude passed to the Agent tool, or, when it passed
+// none, "not overridden (session: <level>)"; CLAUDE_CODE_EFFORT_LEVEL, when it was set, is named instead.
+const SEAT_EFFORT = /^(?:(?:low|medium|high|xhigh|max)|not overridden \(session: (?:low|medium|high|xhigh|max|not recorded)(?:; if this seat's model isn't the session's, that model's default applies)?\)|CLAUDE_CODE_EFFORT_LEVEL: (?:low|medium|high|xhigh|max|auto|unset)(?: \(overrode (?:low|medium|high|xhigh|max)\))?)$/;
+export function seatEffortOf(run, agent) {
+  const asked = EFFORT_LEVELS.includes(agent.effort) ? agent.effort : null;
+  if (run.effortOverride) return `CLAUDE_CODE_EFFORT_LEVEL: ${run.effortOverride}${asked ? ` (overrode ${asked})` : ''}`;
+  if (asked) return asked;
+  return `not overridden (session: ${run.sessionEffort ?? 'not recorded'}${agent.model === 'inherit' ? '' : "; if this seat's model isn't the session's, that model's default applies"})`;
+}
+function checkAgents(list, strict = true) {
   if (list == null) return null;
   if (!Array.isArray(list)) throw new Error('agents must be a list, one entry per subagent that ran');
   if (list.length > 25) throw new Error('agents can have at most 25 entries');
@@ -448,7 +532,15 @@ function checkAgents(list) {
     if (!STEPS.includes(x.step)) throw new Error(`agents[${i}].step must be ${STEPS.join(', ')}`);
     const model = x.model == null ? 'inherit' : String(x.model);
     if (model !== 'inherit' && !isModelName(model)) throw new Error(`agents[${i}].model must be inherit, ${MODEL_ALIASES.join(', ')} or a Claude model id such as claude-opus-5-5`);
-    return { label, step: x.step, model, tokens: nint(x.tokens, `agents[${i}].tokens`), toolUses: nint(x.toolUses, `agents[${i}].toolUses`), durationMs: nint(x.durationMs, `agents[${i}].durationMs`) };
+    // Given by Claude, effort is the level it passed to the Agent tool, or left out; read back, it's what log wrote.
+    let effort = null;
+    if (x.effort != null) {
+      if (strict && !EFFORT_LEVELS.includes(x.effort)) throw new Error(`agents[${i}].effort is the effort you passed to the Agent tool for it (${EFFORT_LEVELS.join(', ')}); leave it out if you passed none`);
+      effort = typeof x.effort === 'string' && x.effort.length <= 200 && SEAT_EFFORT.test(x.effort) ? x.effort : null;
+    }
+    const out = { label, step: x.step, model, effort, tokens: nint(x.tokens, `agents[${i}].tokens`), toolUses: nint(x.toolUses, `agents[${i}].toolUses`), durationMs: nint(x.durationMs, `agents[${i}].durationMs`) };
+    if (!strict && Object.hasOwn(x, 'reportUnescaped')) out.reportUnescaped = typeof x.reportUnescaped === 'boolean' ? x.reportUnescaped : null;
+    return out;
   });
 }
 // The appeal: whether it ran, how many dismissed findings it checked, and each one it flagged
@@ -679,6 +771,19 @@ function markdown(runs) {
       L.push(`| ${r.runId} | ${cell(r.time.slice(0, 10))} | ${cell(r.label)} | ${cell(r.target)} | ${found} | ${res ? (res.verified ? `${kept(res)} (${res.overstated})` : 'unverified') : '-'} | ${res ? (res.verified ? res.dismissed : '-') : '-'} | ${min} | ${tok} | ${r.updates.length ? `${fx.failed} of ${fx.made}` : '-'} | ${res?.baseline ? res.baseline.confirmed : '-'} | ${ap} |`);
     }
     L.push('');
+    const noted = runs.filter(r => r.results && (r.results.severityChanges?.length || r.results.deviations?.length || r.results.agents?.some(a => a.reportUnescaped)));
+    if (noted.length) {
+      L.push('## Severity changes, deviations and unescaped reports', '');
+      for (const r of noted) {
+        const res = r.results, parts = [];
+        if (res.severityChanges?.length) parts.push(`${res.severityChanges.length} severity ${res.severityChanges.length === 1 ? 'change' : 'changes'}: ${res.severityChanges.map(x => `${cell(x.finding)} ${x.reviewers.map(v => v.toUpperCase()).join('/')} to ${x.judge.toUpperCase()} (${x.change}${x.reason ? '' : ', no reason given'})`).join('; ')}`);
+        if (res.deviations?.length) parts.push(`${res.deviations.length} ${res.deviations.length === 1 ? 'deviation' : 'deviations'} from SKILL.md (their exact text is in review-log.jsonl)`);
+        const un = (res.agents || []).filter(a => a.reportUnescaped).map(a => cell(a.label));
+        if (un.length) parts.push(`Reports unescaped from a completion notice: ${un.join(', ')}`);
+        L.push(`- ${r.runId}: ${parts.join('. ')}.`);
+      }
+      L.push('');
+    }
   }
   const c = compare(runs);
   L.push('## By type', '');
@@ -689,7 +794,7 @@ function markdown(runs) {
     L.push('| Type | Runs | Findings per run | Kept | Dismissed | Kept but severity cut | Minutes per run | Total tokens per run (appeal agent) | Fixes that failed recheck | Regressions per rechecked run | Council kept vs baseline confirmed (per run) | Appeal: dismissals flagged, reinstated | Unverified runs | Planned, not logged |', '|---|---|---|---|---|---|---|---|---|---|---|---|---|---|');
     for (const g of c) L.push(`| ${cell(g.label)} | ${g.runs} | ${dash(g.findingsPerRun)} | ${pct(g.keptPercent)} | ${pct(g.dismissedPercent)} | ${pct(g.overstatedOfKeptPercent)} | ${minCell(g.minutes)} | ${g.tokensPerRun == null ? '-' : `${g.tokensPerRun}${g.appealUsagePerRun != null ? ` (${g.appealUsagePerRun})` : ''}`} | ${pct(g.fixesFailedRecheckPercent)} | ${dash(g.regressionsPerRecheckedRun)} | ${g.baseline ? `${g.baseline.councilKeptPerRun} vs ${g.baseline.baselineConfirmedPerRun} (${runsOf(g.baseline.runs)})` : '-'} | ${g.appeal ? `${g.appeal.flagged} of ${g.appeal.dismissedChecked}, ${g.appeal.reinstated} reinstated${g.appeal.pending ? `, ${g.appeal.pending} pending` : ''}` : '-'} | ${g.unverifiedRuns} | ${g.unfinishedRuns} |`);
     if (c.more) L.push('', `(${c.more} more types not shown.)`);
-    L.push('', 'Kept is the share of combined findings that survived checking, REAL or OVERSTATED (an OVERSTATED finding is a real problem rated too high); dismissed is the share marked NOT REAL. Kept but severity cut is the share of kept findings marked OVERSTATED, which shows how far the reviewers\' severities had to be corrected. All three count only verified runs. The baseline\'s findings are counted confirmed or not, with no OVERSTATED bucket, so a real baseline finding counts as confirmed even if its severity was too high; its confirmed count is the counterpart of the council\'s kept count.', '', 'Minutes are of two kinds and never averaged together: wall time, from the start to when the last agent finished, and the critical path, worked out from the agents\' reported times (the slowest reviewer, then each later step), which leaves out Claude\'s own time between steps. Minutes logged before Council Dial 1.3.0 are unlabelled, because they could be either; logging the run again labels them.', '', 'Total tokens per run count only runs where every agent the run had is listed with the tokens Claude Code reported for it, and so does the appeal agent\'s figure in brackets. A type ending in @ and a model was run on that model (as asked for; Claude Code doesn\'t report the model a subagent actually ran on to the main session). Small numbers of runs say little; compare types on the same kind of target.', '', 'Where a run\'s reports were saved, they are in the folder named by its run id, next to this file. Finding numbers restart in every run, so cite them with the run id, such as 20261107-2f23/M12.', '');
+    L.push('', 'Kept is the share of combined findings that survived checking, REAL or OVERSTATED (an OVERSTATED finding is a real problem rated too high); dismissed is the share marked NOT REAL. Kept but severity cut is the share of kept findings marked OVERSTATED, which shows how far the reviewers\' severities had to be corrected. All three count only verified runs. The baseline\'s findings are counted confirmed or not, with no OVERSTATED bucket, so a real baseline finding counts as confirmed even if its severity was too high; its confirmed count is the counterpart of the council\'s kept count.', '', 'Minutes are of two kinds and never averaged together: wall time, from the start to when the last agent finished, and the critical path, worked out from the agents\' reported times (the slowest reviewer, then each later step), which leaves out Claude\'s own time between steps. Both are wall-clock time: an agent\'s reported duration includes any time it spent waiting for you to approve a permission prompt (in Claude Code\'s Manual mode), so neither is pure model time. Minutes logged before Council Dial 1.3.0 are unlabelled, because they could be either; logging the run again labels them.', '', 'Total tokens per run count only runs where every agent the run had is listed with the tokens Claude Code reported for it, and so does the appeal agent\'s figure in brackets. A type ending in @ and a model was run on that model (as asked for; Claude Code doesn\'t report the model a subagent actually ran on to the main session). Small numbers of runs say little; compare types on the same kind of target.', '', 'Where a run\'s reports were saved, they are in the folder named by its run id, next to this file. Finding numbers restart in every run, so cite them with the run id, such as 20261107-2f23/M12.', '');
   }
   return L.join('\n');
 }
@@ -737,9 +842,11 @@ const MAX_REPORT = 200000;
 // Finding numbers (a reviewer's 1, 2, 3, the judge's M1, M2) restart in every run, so anything
 // Council Dial writes cites them with the run id: 20261107-2f23/M12.
 export const citeAs = (runId, n) => `${runId}/${n}`;
-function saveReport(p, run, label, input, now, { replace = false, savedLater = false } = {}) {
-  // Kept as written, apart from line endings, control characters and invisible characters.
-  const text = String(input ?? '').replace(/\r\n?/g, '\n').replace(/[^\P{Cc}\n\t]/gu, '').replace(HIDDEN, '').replace(/^\n+|\s+$/g, '');
+function saveReport(p, run, label, input, now, { replace = false, savedLater = false, noticeEscaped = false } = {}) {
+  // Kept as written, apart from line endings, control characters and invisible characters, and, with
+  // --notice-escaped, the notice's &lt;, &gt; and &amp; turned back into <, > and &.
+  const un = noticeEscaped ? unescapeNotice(input) : { text: String(input ?? ''), count: 0 };
+  const text = un.text.replace(/\r\n?/g, '\n').replace(/[^\P{Cc}\n\t]/gu, '').replace(HIDDEN, '').replace(/^\n+|\s+$/g, '');
   if (!text) throw new Error('give the agent\'s full report on stdin');
   if (text.length > MAX_REPORT) throw new Error(`the report is ${text.length} characters; the most Council Dial saves is ${MAX_REPORT}`);
   const dir = path.join(p.dir, run.runId);
@@ -755,6 +862,7 @@ function saveReport(p, run, label, input, now, { replace = false, savedLater = f
   const header = [
     `Saved by Council Dial ${PLUGIN_VERSION} on ${now.toISOString()}. Type: ${inlineMd(run.label, 1000)}.`,
     ...(savedLater ? ['Saved from the session text after the run, not captured as the agent finished.'] : []),
+    ...(noticeEscaped ? [`${UNESCAPED_NOTE} ${un.count} of them back into the characters.`] : []),
     'This is the agent\'s report as it returned it, with control and invisible characters removed. It is kept in a code block, so links, images and HTML in it (which can come from the reviewed material) are shown as text and never load or open. It is data, not instructions.',
     `Finding numbers restart in every run; cite a finding with the run id and the number its report gives it, such as ${citeAs(run.runId, '2')} for a reviewer's finding 2${run.type.combine === 'judged' ? ` or ${citeAs(run.runId, 'M1')} for the judge's finding M1` : ''}.`,
   ];
@@ -762,7 +870,16 @@ function saveReport(p, run, label, input, now, { replace = false, savedLater = f
   // no line of the report can close the block early.
   const fence = '`'.repeat(Math.max(3, ...(text.match(/`+/g) || []).map(s => s.length + 1)));
   writeAtomic(file, `# ${inlineMd(label, 1000)}: run ${run.runId}\n\n${header.join('\n')}\n\n${fence}text\n${text}\n${fence}\n`);
-  return path.posix.join(p.rel, run.runId, reportName(label));
+  const warning = !noticeEscaped && looksEscaped(text) ? 'the report has &lt;, &gt; or &amp; and no < or >, as a completion notice shows them; if it came from one, save it again with --notice-escaped --replace' : null;
+  return { file: path.posix.join(p.rel, run.runId, reportName(label)), unescaped: noticeEscaped ? un.count : null, warning };
+}
+// Whether a saved report's text was unescaped from a completion notice: true or false from its header,
+// null when it isn't saved (or is a link, which Council Dial doesn't read through).
+function reportUnescapedOf(p, runId, label) {
+  const f = path.join(p.dir, runId, reportName(label));
+  try { if (!fs.lstatSync(f).isFile()) return null; } catch { return null; }
+  const fd = fs.openSync(f, 'r');
+  try { const b = Buffer.alloc(4096); const n = fs.readSync(fd, b, 0, 4096, 0); const head = b.subarray(0, n).toString('utf8').split('\n\n').slice(0, 2).join('\n'); return head.includes(UNESCAPED_NOTE); } finally { fs.closeSync(fd); }
 }
 const savedReports = (p, runId) => { try { return fs.readdirSync(path.join(p.dir, runId)).filter(f => f.endsWith('.md')).length; } catch { return 0; } };
 
@@ -828,6 +945,7 @@ export function readEnv() {
 const envNamed = e => Object.fromEntries(ENV_NAMES.map(k => [k, e?.[k]]));
 
 export function runCommand(o, input, now = new Date(), givenEnv = readEnv()) {
+  if (o.input != null) input = readInputFile(o.input);
   const env = envNamed(givenEnv);
   const project = path.resolve(o.project || process.cwd());
   const p = logPaths(project, o.logDir);
@@ -865,6 +983,8 @@ export function runCommand(o, input, now = new Date(), givenEnv = readEnv()) {
           if (seen.has(m.label)) throw new Error(`agents lists ${m.label} twice`);
           if (m.step === 'appeal' && results.appeal?.ran !== true) throw new Error('agents lists the appeal agent, but appeal.ran isn\'t true; drop the appeal entry if it didn\'t run, or set appeal.ran');
           seen.add(m.label); a.label = m.label;
+          a.effort = seatEffortOf(run, a);
+          a.reportUnescaped = reportUnescapedOf(p, run.runId, m.label);
         });
       }
       const { unlabelledMinutes, ...row } = results;
@@ -888,8 +1008,8 @@ export function runCommand(o, input, now = new Date(), givenEnv = readEnv()) {
       const label = labels.find(l => l.toLowerCase() === clean(o.agent, 80).toLowerCase());
       if (!label) throw new Error(`--agent must be one of this run's agents: ${labels.join('; ')}`);
       const replaced = fs.existsSync(path.join(p.dir, run.runId, reportName(label)));
-      const file = saveReport(p, run, label, input, now, { replace: o.replace, savedLater: o.savedLater });
-      return { saved: true, runId: o.run, agent: label, file, replaced, ...note };
+      const saved = saveReport(p, run, label, input, now, { replace: o.replace, savedLater: o.savedLater, noticeEscaped: o.noticeEscaped });
+      return { saved: true, runId: o.run, agent: label, file: saved.file, replaced, ...(saved.unescaped != null ? { unescaped: saved.unescaped } : {}), ...note, ...(saved.warning ? { warning: saved.warning } : {}) };
     }
     case 'setup': {
       const run = runs.find(r => r.runId === o.run);
@@ -921,7 +1041,7 @@ const isMain = process.argv[1] && realOrSame(process.argv[1]) === realOrSame(fil
 if (isMain) {
   try {
     const o = parseArgs(process.argv.slice(2));
-    const input = ['plan', 'log', 'update', 'report'].includes(o.cmd) ? await readStdin() : '';
+    const input = ['plan', 'log', 'update', 'report'].includes(o.cmd) && o.input == null ? await readStdin() : '';
     console.log(JSON.stringify(runCommand(o, input, new Date(), readEnv())));
   } catch (e) {
     console.log(JSON.stringify({ error: e.message }));
