@@ -1,5 +1,24 @@
 # Council Dial
 
+## What it is
+
+Council Dial is a Claude Code plugin that has a small panel of Claude reviewers check your code, docs or plan. In its standard setup, three reviewers each check the work on their own, a judge checks every finding they report and throws out the ones that don't hold up, and an appeal agent rechecks anything the judge threw out. You make the final call on what to keep.
+
+It's for people who already review work with Claude Code and want to know which way of reviewing works best for their kind of work: for example, whether specialised reviewers find more than generalists, or whether a judge is worth the extra tokens. Every run's setup and what it found go into a log in your project, so over time you can compare setups on your own material.
+
+It's a research tool. It doesn't claim that any setup, including the judge and the appeal, works better than another; the log is there so you can measure that on your own work.
+
+## Quick start
+
+1. In Claude Code, run `/plugin install council-dial --marketplace Ablation-Lab/council-dial` (details and older versions under [Install](#install)). It needs Node.js 18 or later.
+2. In your project, say `Run a standard review council on the diff of this branch`. Claude says how many subagents it will start and roughly how many tokens it will use, and waits for your yes.
+3. Read the findings, most serious first. If the appeal thinks the judge wrongly threw something out, Claude shows you both views and you decide.
+4. After a few runs, ask `How do the council types compare in my review log?`
+
+To try it first on a small made-up module with known answers, see [Try it with the sample](#try-it-with-the-sample-for-reviewers).
+
+## Overview
+
 When you want code, docs or a plan reviewed, Council Dial has Claude run a review council of subagents set up the way you choose: specialised or generalist reviewers, a judge (with an appeal of the findings it throws out), a pooled list or a majority consensus to combine their findings, and optional debate, sequential and single-reviewer baseline runs. Claude tells you how many subagents a run will use and, from your earlier runs of the same type, roughly how many tokens, and waits for your yes. Each run's type and results go into a log in your project, so you can compare council types over time.
 
 It was made for research on review councils, where the question isn't only "what did the review find?" but "which kind of review finds the most for the effort?". It adds one skill, `council-dial` (in Claude Code: `/council-dial:council-dial`). It's an independent project, not made or endorsed by Anthropic.
@@ -95,7 +114,7 @@ What the log records, and what Claude Code doesn't make available:
 
 ## Privacy
 
-Council Dial has no server, account or telemetry and sends nothing anywhere itself. The review log in your project holds, for each run: the date and time it was planned, logged and rechecked; the type (including any custom role names) and brief version; a description of what was reviewed (up to 600 characters; `review-log.md` shows the first 120); the counts (findings per reviewer, combined, confirmed, overstated, dismissed, by severity, the baseline's, fixes and regressions after rechecks); for each finding the appeal flagged, a short title (up to 120 characters, in `review-log.jsonl` only), the appeal's view and your call; the main session's model id and the subagents' model; the session's effort level; each subagent's label, tokens, tool uses and time; the time taken (wall time and the agents' critical path); and short notes. The log itself doesn't hold the reports or the material reviewed. You can read, edit or delete it. If your project is public, the log is committed with it unless you add `reviews/` to `.gitignore`; do that for security reviews, because counts of HIGH findings and failed fixes per target, and the titles of appealed findings, hint at where problems were.
+Council Dial has no server, account or telemetry and sends nothing anywhere itself. The review log in your project holds, for each run: the date and time it was planned, logged and rechecked; the type (including any custom role names) and brief version; a description of what was reviewed (up to 600 characters; `review-log.md` shows the first 120); the counts (findings per reviewer, combined, confirmed, overstated, dismissed, by severity, the baseline's, fixes and regressions after rechecks); for each finding the appeal flagged, a short title (up to 120 characters, in `review-log.jsonl` only), the appeal's view and your call; the main session's model id and the subagents' model; the session's effort level; each subagent's label, tokens, tool uses and time; the time taken (wall time and the agents' critical path); and short notes (up to 400 characters each; longer notes are cut, and the script warns Claude, which tells you). The log itself doesn't hold the reports or the material reviewed. You can read, edit or delete it. If your project is public, the log is committed with it unless you add `reviews/` to `.gitignore`; do that for security reviews, because counts of HIGH findings and failed fixes per target, and the titles of appealed findings, hint at where problems were.
 
 **Saved reports.** Next to the log, each run's folder (`reviews/<run id>/`) holds the full report of every reviewer, debate turn, judge, appeal and baseline agent, as they returned it apart from control and invisible characters, which are removed, so anyone can see exactly what was found and what was thrown out and why. Each report is saved inside a Markdown code block, so links, images and HTML in it, which can come from the material reviewed, show as plain text: they don't load, open or run on GitHub or in a Markdown viewer. The text itself is kept, including any instructions the material contained; the file's header says it's data, not instructions. Reports quote the material they reviewed, including code, file paths and anything sensitive in it, so for a private project keep them out of git: add `reviews/*/` to `.gitignore` (or all of `reviews/`). Keep the reports of security reviews out of git on public projects too, because they describe each problem in full, often with a way to exploit it. Ask Claude not to save them if you'd rather not keep them at all. What the subagents review reaches Anthropic the way anything in your conversation does.
 
