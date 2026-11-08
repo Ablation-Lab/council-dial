@@ -5,7 +5,10 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { runCommand, parseArgs, buildPlan, clean, logPaths, compare, runsFrom, readLog, checkResults } from '../plugin/skills/council-dial/scripts/council.mjs';
+import { runCommand, parseArgs as parseArgsV3, buildPlan, clean, logPaths, compare, runsFrom, readLog, checkResults } from '../plugin/skills/council-dial/scripts/council.mjs';
+// Written for brief version 2, which stays runnable: plan and estimate default to it in this file unless
+// a test names a version (brief version 3 is tested in round15).
+const parseArgs = argv => parseArgsV3(['plan', 'estimate'].includes(argv[0]) && !argv.includes('--brief-version') ? [...argv, '--brief-version', '2'] : argv);
 
 const SCRIPT = fileURLToPath(new URL('../plugin/skills/council-dial/scripts/council.mjs', import.meta.url));
 const SAMPLES = fileURLToPath(new URL('../samples/', import.meta.url));

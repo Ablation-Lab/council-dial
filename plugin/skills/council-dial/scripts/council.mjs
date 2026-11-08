@@ -28,15 +28,19 @@
 // Output is one line of JSON.
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 // Brief version 2: the judge counts NOT REAL findings' severity one way, and gives reasons for them;
 // judged councils have an appeal step.
-export const VERSION = 2;
+// Brief versions: plan writes VERSION unless --brief-version picks another of BRIEF_VERSIONS. Version 2's
+// templates are briefs/*.md, unchanged; version 3 replaces three of them with briefs/v3/*.md.
+export const VERSION = 3;
+export const BRIEF_VERSIONS = [2, 3];
 // Council Dial's own version, recorded with each plan so a run's setup can be rebuilt exactly. Keep it
 // equal to the plugin manifest's version (a test checks).
-export const PLUGIN_VERSION = '1.4.0';
+export const PLUGIN_VERSION = '1.5.0';
 const COMMANDS = ['plan', 'estimate', 'log', 'update', 'report', 'setup', 'list', 'compare'];
 // The description of what's reviewed is kept at this length when planned and when read back.
 export const TARGET_MAX = 600;
@@ -69,7 +73,7 @@ const MAX_GROUPS = 50;
 
 export function parseArgs(argv) {
   const [cmd, ...rest] = argv;
-  const o = { cmd, reviewers: null, combine: null, n: null, roles: null, debate: false, sequential: false, baseline: false, noAppeal: false, model: null, mainModel: null, agent: null, replace: false, savedLater: false, noticeEscaped: false, input: null, effort: null, seatModel: null, seatEffort: null, logDir: 'reviews', project: null, run: null, limit: 10 };
+  const o = { cmd, reviewers: null, combine: null, n: null, roles: null, debate: false, sequential: false, baseline: false, noAppeal: false, model: null, mainModel: null, agent: null, replace: false, savedLater: false, noticeEscaped: false, input: null, effort: null, seatModel: null, seatEffort: null, briefVersion: VERSION, allowRunningCode: false, readEffortSettings: false, logDir: 'reviews', project: null, run: null, limit: 10 };
   for (let i = 0; i < rest.length; i++) {
     const a = rest[i];
     const val = () => { const v = rest[++i]; if (v == null || v.startsWith('--')) throw new Error(`${a} needs a value`); return v; };
@@ -85,6 +89,9 @@ export function parseArgs(argv) {
     else if (a === '--effort') o.effort = val().trim().toLowerCase();
     else if (a === '--seat-model') o.seatModel = val();
     else if (a === '--seat-effort') o.seatEffort = val();
+    else if (a === '--brief-version') { o.briefVersion = Number(val()); o.briefVersionGiven = true; }
+    else if (a === '--allow-running-code') o.allowRunningCode = true;
+    else if (a === '--read-effort-settings') o.readEffortSettings = true;
     else if (a === '--main-model') o.mainModel = val();
     else if (a === '--agent') o.agent = val();
     else if (a === '--replace') o.replace = true;
@@ -105,9 +112,10 @@ export function parseArgs(argv) {
     if (o.noAppeal && o.combine !== 'judged') throw new Error('--no-appeal is for judged councils; only they have an appeal step');
     if (o.model != null && !MODEL_ALIASES.includes(o.model)) throw new Error(`--model must be ${MODEL_ALIASES.join(', ')} (the Agent tool takes only these aliases); leave it out to use this session's model`);
     if (o.mainModel != null && !CLAUDE_MODEL_ID.test(o.mainModel)) throw new Error('--main-model is the main session\'s model id, such as claude-opus-5-5 (it starts with claude- and may end in [1m])');
+    if (!BRIEF_VERSIONS.includes(o.briefVersion)) throw new Error(`--brief-version must be ${BRIEF_VERSIONS.join(' or ')}`);
     if (o.effort != null && !EFFORT_LEVELS.includes(o.effort)) throw new Error(`--effort must be ${EFFORT_LEVELS.join(', ')} (the Agent tool's effort levels); leave it out to leave every seat's effort unset`);
-  } else if (o.n != null || o.roles != null || o.reviewers || o.combine || o.debate || o.sequential || o.baseline || o.noAppeal || o.model != null || o.mainModel != null || o.effort != null || o.seatModel != null || o.seatEffort != null) {
-    throw new Error(`--n, --roles, --reviewers, --combine, --debate, --sequential, --baseline, --no-appeal, --model, --effort, --seat-model, --seat-effort and --main-model are for estimate and plan only${cmd === 'list' ? ' (list takes --limit)' : ''}`);
+  } else if (o.n != null || o.roles != null || o.reviewers || o.combine || o.debate || o.sequential || o.baseline || o.noAppeal || o.model != null || o.mainModel != null || o.effort != null || o.seatModel != null || o.seatEffort != null || o.briefVersionGiven || o.allowRunningCode || o.readEffortSettings) {
+    throw new Error(`--n, --roles, --reviewers, --combine, --debate, --sequential, --baseline, --no-appeal, --model, --effort, --seat-model, --seat-effort, --brief-version, --allow-running-code, --read-effort-settings and --main-model are for estimate and plan only${cmd === 'list' ? ' (list takes --limit)' : ''}`);
   }
   if (o.n != null && (!Number.isInteger(o.n) || o.n < 1 || o.n > 9)) throw new Error('--n must be a whole number from 1 to 9');
   // Run ids are written in lower case; one retyped in capitals is the same id.
@@ -119,6 +127,7 @@ export function parseArgs(argv) {
   if (['log', 'update', 'report', 'setup'].includes(cmd) && !o.run) throw new Error('give --run with the id from plan');
   if (cmd === 'report' && !o.agent) throw new Error('give --agent with the agent\'s label from the plan, such as "reviewer: correctness" or "judge"');
   if (cmd !== 'report' && (o.agent != null || o.replace || o.savedLater || o.noticeEscaped)) throw new Error('--agent, --replace, --saved-later and --notice-escaped are for report only');
+  delete o.briefVersionGiven;
   if (o.input != null && !['plan', 'log', 'update', 'report'].includes(cmd)) throw new Error('--input is for plan, log, update and report, which read their input from it');
   return o;
 }
@@ -179,16 +188,21 @@ const BRIEF_TEMPLATES = {
 // them). plan refuses templates that differ, so a run logged as brief version VERSION always had this
 // wording. Change it only with the texts and VERSION; a test keeps it equal to the files.
 export const BRIEF_SHA256 = '317ae729a8abed8e4f2ed91b5b479066c57cff6c4ca9c31409bf8eec7b7e3d5d';
+export const BRIEF_SHA256_V3 = '2f545f09d9477094e4ead755b5a7a92781a811ff2ef1497f9a20251577b5fec0';
+export const BRIEF_DIGESTS = { 2: BRIEF_SHA256, 3: BRIEF_SHA256_V3 };
+// The templates version 3 replaces; the rest are the same files for both versions.
+export const BRIEF_V3_FILES = ['shared', 'judge', 'appeal'];
 const REINSTALL = 'reinstall Council Dial (the plugin, or the whole skills/council-dial folder)';
 export const briefDigest = texts => crypto.createHash('sha256').update(JSON.stringify(Object.entries(BRIEF_TEMPLATES).map(([name, need]) => need.map(k => texts[name][k])))).digest('hex');
-let briefTexts = null;
+const briefTexts = new Map();
 // Read only when a plan needs briefs, so the other commands don't depend on the templates.
-function templates() {
-  if (briefTexts) return briefTexts;
+function templates(v = VERSION) {
+  if (briefTexts.has(v)) return briefTexts.get(v);
   const out = {};
   for (const [name, need] of Object.entries(BRIEF_TEMPLATES)) {
+    const rel = v >= 3 && BRIEF_V3_FILES.includes(name) ? `v3/${name}.md` : `${name}.md`;
     let text;
-    try { text = fs.readFileSync(path.join(BRIEF_DIR, `${name}.md`), 'utf8'); } catch (e) { throw new Error(`Council Dial's brief template briefs/${name}.md can't be read (${clean(e.code || e.message, 60)}); ${REINSTALL}`); }
+    try { text = fs.readFileSync(path.join(BRIEF_DIR, rel), 'utf8'); } catch (e) { throw new Error(`Council Dial's brief template briefs/${rel} can't be read (${clean(e.code || e.message, 60)}); ${REINSTALL}`); }
     // Line breaks are read as \n whatever the checkout used, so the briefs are the same on every system.
     text = text.replace(new RegExp('^' + cp(0xfeff)), '').replace(/\r\n?/g, '\n');
     const sections = Object.create(null);
@@ -197,11 +211,12 @@ function templates() {
       const m = nl < 0 ? null : part.slice(nl + 1).match(/^```text\n([\s\S]*?)\n```$/m);
       if (m) sections[part.slice(0, nl).trim()] = m[1];
     }
-    for (const s of need) if (!(s in sections)) throw new Error(`Council Dial's brief template briefs/${name}.md has no "${s}" text; ${REINSTALL}`);
+    for (const s of need) if (!(s in sections)) throw new Error(`Council Dial's brief template briefs/${rel} has no "${s}" text; ${REINSTALL}`);
     out[name] = sections;
   }
-  if (briefDigest(out) !== BRIEF_SHA256) throw new Error(`the brief templates in Council Dial's briefs/ folder have been changed, so this run's briefs wouldn't match brief version ${VERSION} and it wouldn't compare with other runs; ${REINSTALL}`);
-  return (briefTexts = out);
+  if (briefDigest(out) !== BRIEF_DIGESTS[v]) throw new Error(`the brief templates in Council Dial's briefs/ folder have been changed, so this run's briefs wouldn't match brief version ${v} and it wouldn't compare with other runs; ${REINSTALL}`);
+  briefTexts.set(v, out);
+  return out;
 }
 function fill(template, values) {
   return template.replace(/\{\{([a-z-]+)\}\}/g, (_, k) => {
@@ -209,32 +224,34 @@ function fill(template, values) {
     return String(values[k]);
   });
 }
-const shared = () => { const s = templates().shared; return { 'what-to-review': null, rules: s.rules, format: s.format }; };
-const focusOf = role => { const s = templates().shared, k = `focus: ${role.toLowerCase()}`; return k in s ? s[k] : null; };
-const whatToReview = t => fill(templates().shared['what-to-review'], { target: t });
+const shared = v => { const s = templates(v).shared; return { 'what-to-review': null, rules: s.rules, format: s.format }; };
+const focusOf = (role, v) => { const s = templates(v).shared, k = `focus: ${role.toLowerCase()}`; return k in s ? s[k] : null; };
+const whatToReview = (t, v) => fill(templates(v).shared['what-to-review'], { target: t });
 
-function reviewerBrief(target, role, k, n, sequential) {
-  const r = templates().reviewer, focus = role ? focusOf(role) : null;
+function reviewerBrief(target, role, k, n, sequential, v = VERSION) {
+  const r = templates(v).reviewer, focus = role ? focusOf(role, v) : null;
   const lens = fill(r[`${n === 1 ? 'alone' : 'council'}-${role ? (focus ? 'role-area' : 'role') : 'everything'}`], { role, n, k, focus });
-  return fill(r[sequential ? 'brief-sequential' : 'brief'], { ...shared(), lens, 'what-to-review': whatToReview(target) });
+  return fill(r[sequential ? 'brief-sequential' : 'brief'], { ...shared(v), lens, 'what-to-review': whatToReview(target, v) });
 }
-function debateBrief(target, role, label, n) {
-  const d = templates().debate;
+function debateBrief(target, role, label, n, v = VERSION) {
+  const d = templates(v).debate;
   const who = role && role !== 'generalist' ? fill(d['who-role'], { role }) : fill(d['who-seat'], { label });
-  return fill(d.brief, { ...shared(), n, who, 'what-to-review': whatToReview(target) });
+  return fill(d.brief, { ...shared(v), n, who, 'what-to-review': whatToReview(target, v) });
 }
 // How every merged finding is counted by severity, so the counts add up to the merged count one way.
 // The judge's brief gives it as briefs/judge.md's severity-rule; log gives it in these words when the
 // counts it's given don't add up (a test keeps the two the same).
 export const COUNT_RULE = 'count every merged finding once: a REAL one at its severity, an OVERSTATED one at the judge\'s corrected severity, and a NOT REAL one at the highest severity a reviewer gave it';
-function judgeBrief(target, n, debate) {
-  const j = templates().judge;
-  return fill(j.brief, { ...shared(), n, 'what-to-review': whatToReview(target), reports: j[debate ? 'reports-after-debate' : 'reports'], 'severity-rule': j['severity-rule'] });
+export const COUNT_RULE_V3 = 'count every merged finding once: a REAL or PARTLY REAL one at its severity, an OVERSTATED or UNDERSTATED one at the severity the judge set, and a NOT REAL one at the highest severity a reviewer gave it';
+export const countRuleOf = v => (v >= 3 ? COUNT_RULE_V3 : COUNT_RULE);
+function judgeBrief(target, n, debate, v = VERSION) {
+  const j = templates(v).judge;
+  return fill(j.brief, { ...shared(v), n, 'what-to-review': whatToReview(target, v), reports: j[debate ? 'reports-after-debate' : 'reports'], 'severity-rule': j['severity-rule'] });
 }
 // The appeal agent sees only the judge's dismissals and the material: not the target description,
 // the reviewers' reports or their briefs, so it reads the dismissed findings without their framing.
-function appealBrief() {
-  return fill(templates().appeal.brief, shared());
+function appealBrief(v = VERSION) {
+  return fill(templates(v).appeal.brief, shared(v));
 }
 // A brief must never tell reviewers the target has planted or deliberate problems: that changes how
 // they review it, so a run on a sample would look better than it is.
@@ -243,8 +260,8 @@ export function checkTarget(t) {
   const m = t.match(PRIMING);
   if (m) throw new Error(`the description of what to review says "${clean(m[0], 60)}"; describe the material only (what it is and where), not whether it has planted, deliberate or known problems, because that changes how the reviewers review it`);
 }
-function baselineBrief(target) {
-  return fill(templates().baseline.brief, { ...shared(), 'what-to-review': whatToReview(target) });
+function baselineBrief(target, v = VERSION) {
+  return fill(templates(v).baseline.brief, { ...shared(v), 'what-to-review': whatToReview(target, v) });
 }
 
 function parseRoles(raw) {
@@ -355,7 +372,7 @@ function modelSuffix(type) {
 export function labelOf(type) {
   const roles = Array.isArray(type.roles) ? type.roles.map(r => r.toLowerCase()).sort() : null;
   const custom = type.reviewers === 'specialised' && roles && roles.join('|') !== [...DEFAULT_ROLES].sort().join('|');
-  return `${type.reviewers}-${type.n}${custom ? ` [${roles.join(', ')}]` : ''}/${type.combine}${type.debate ? '+debate' : ''}${type.sequential ? '+sequential' : ''}${type.appeal ? '+appeal' : ''}${modelSuffix(type)}`;
+  return `${type.reviewers}-${type.n}${custom ? ` [${roles.join(', ')}]` : ''}/${type.combine}${type.debate ? '+debate' : ''}${type.sequential ? '+sequential' : ''}${type.appeal ? '+appeal' : ''}${type.briefVersion >= 3 ? ` v${type.briefVersion}` : ''}${modelSuffix(type)}`;
 }
 
 // The model the subagents run on, as far as the main session can tell. Claude Code's order: the
@@ -389,7 +406,7 @@ export function councilType(o, env = {}) {
   const n = roles ? roles.length : (o.n ?? 3);
   if (n < 2 && (o.debate || o.combine === 'consensus')) throw new Error('debate and consensus need at least 2 reviewers');
   const { models, warnings: modelWarnings } = resolveModels(o, env);
-  const type = { reviewers: o.reviewers, n, roles, combine: o.combine, debate: o.debate, sequential: o.sequential, baseline: o.baseline, appeal, models };
+  const type = { reviewers: o.reviewers, n, roles, combine: o.combine, debate: o.debate, sequential: o.sequential, baseline: o.baseline, appeal, models, briefVersion: o.briefVersion ?? VERSION };
   checkReportNames(type);
   const seats = seatsOf(o, type);
   type.effort = o.effort ?? null;
@@ -443,6 +460,105 @@ export function effortOverrideOf(env = {}) {
   return { override: raw, warnings: [`CLAUDE_CODE_EFFORT_LEVEL is set to ${raw}, ${OVERRIDE_HOW}: ${effect}. Per-seat effort settings won't apply; to use them, start Claude Code without it (the README says how)`] };
 }
 
+// ---- The effort a seat gets when none is passed. On the session's model it's the session's level (from
+// CLAUDE_EFFORT). On another model it's the level saved for that model, or a top-level effortLevel that
+// applies to it, in the highest-precedence settings file that has one (managed, then local, then
+// project, then user); otherwise the model's default. Claude Code's docs give this order, and a test in
+// scratch projects confirmed a saved level reaches a subagent on that model. Only the effort keys are
+// read from each file; nothing else in it is kept, logged or passed on. The user's settings file is
+// read only with --read-effort-settings. MDM, registry and server-managed policies and --settings files
+// can't be read, so the level shown is the one these files give.
+export const MODEL_OF_ALIAS = { opus: 'claude-opus-5-5', sonnet: 'claude-sonnet-5-5', haiku: 'claude-haiku-5-5', fable: 'claude-fable-5-1' };
+export const defaultEffortOf = m => (/^claude-(opus|sonnet|haiku)-5-5$/.test(m) ? 'medium' : m === 'claude-opus-4-7' ? 'xhigh' : 'high');
+const SAVED_LEVELS = ['low', 'medium', 'high', 'xhigh'];
+const familyOf = m => (m && /^claude-(opus|sonnet|haiku|fable)-/.exec(m)?.[1]) || null;
+const bareId = m => (m ? String(m).replace(/\[1m\]$/, '') : null);
+// The model id a seat runs on, as far as the plan can tell (null when it can't): an alias in the
+// session model's family is the session's model, as the sub-agents docs say.
+export function seatModelId(models, seat) {
+  const r = seatRunsOn(models, seat);
+  if (r === 'inherit') return null;
+  if (MODEL_ALIASES.includes(r)) { const main = bareId(models?.main); return familyOf(main) === r ? main : MODEL_OF_ALIAS[r]; }
+  return bareId(r);
+}
+export const MANAGED_SETTINGS_DIR = process.platform === 'win32' ? 'C:\\Program Files\\ClaudeCode' : process.platform === 'darwin' ? '/Library/Application Support/ClaudeCode' : '/etc/claude-code';
+function effortKeysOf(file, warnings, what) {
+  let st; try { st = fs.statSync(file); } catch { return null; }
+  if (!st.isFile() || st.size > 1024 * 1024) return null;
+  let j; try { j = JSON.parse(fs.readFileSync(file, 'utf8').replace(new RegExp('^' + cp(0xfeff)), '')); } catch { warnings.push(`${what} couldn't be read as JSON, so its effort settings weren't checked`); return null; }
+  if (!j || typeof j !== 'object' || Array.isArray(j)) return null;
+  const lvl = (x, all) => (typeof x === 'string' && (all ? EFFORT_LEVELS : SAVED_LEVELS).includes(x) ? x : null);
+  const models = {};
+  if (j.modelSettings && typeof j.modelSettings === 'object' && !Array.isArray(j.modelSettings)) {
+    for (const [k, x] of Object.entries(j.modelSettings)) if (x && typeof x === 'object') models[String(k).toLowerCase()] = { effortLevel: lvl(x.effortLevel, false), maxEffortLevel: lvl(x.maxEffortLevel, true) };
+  }
+  return { effortLevel: lvl(j.effortLevel, false), maxEffortLevel: lvl(j.maxEffortLevel, true), models };
+}
+export function effortSettingsOf(project, env = {}, { readUser = false, managedDir = MANAGED_SETTINGS_DIR } = {}) {
+  const warnings = [], sources = [], checked = [];
+  // Managed: managed-settings.json, then managed-settings.d/*.json in alphabetical order, later values winning.
+  let managed = null;
+  const mfiles = [path.join(managedDir, 'managed-settings.json')];
+  try { mfiles.push(...fs.readdirSync(path.join(managedDir, 'managed-settings.d')).filter(n => n.endsWith('.json') && !n.startsWith('.')).sort().map(n => path.join(managedDir, 'managed-settings.d', n))); } catch {}
+  for (const mf of mfiles) {
+    const k = effortKeysOf(mf, warnings, 'a managed settings file');
+    if (!k) continue;
+    managed ??= { effortLevel: null, maxEffortLevel: null, models: {} };
+    if (k.effortLevel) managed.effortLevel = k.effortLevel;
+    if (k.maxEffortLevel) managed.maxEffortLevel = k.maxEffortLevel;
+    for (const [m, x] of Object.entries(k.models)) managed.models[m] = { ...managed.models[m], ...Object.fromEntries(Object.entries(x).filter(([, v]) => v)) };
+  }
+  checked.push('managed');
+  if (managed) sources.push({ kind: 'managed', where: 'managed settings', ...managed });
+  for (const [kind, rel, where] of [['local', '.claude/settings.local.json', 'project local settings (.claude/settings.local.json)'], ['project', '.claude/settings.json', 'project settings (.claude/settings.json)']]) {
+    const k = effortKeysOf(path.join(project, rel), warnings, where);
+    checked.push(kind);
+    if (k) sources.push({ kind, where, ...k });
+  }
+  if (readUser) {
+    const dir = env.CLAUDE_CONFIG_DIR ? String(env.CLAUDE_CONFIG_DIR) : path.join(os.homedir(), '.claude');
+    const k = effortKeysOf(path.join(dir, 'settings.json'), warnings, 'user settings');
+    checked.push('user');
+    if (k) sources.push({ kind: 'user', where: 'user settings', ...k });
+  }
+  return { sources, checked, userChecked: readUser, warnings };
+}
+const entryFor = (src, m) => {
+  for (const [k, x] of Object.entries(src.models)) {
+    const key = k.replace(/\[1m\]$/, '').replace(/-\d{8}$/, '');
+    if (key === m || MODEL_OF_ALIAS[key] === m) return x;
+  }
+  return null;
+};
+// A top-level effortLevel in user settings is the older form /effort wrote: it applies to Opus 5, Fable
+// 5.1 and earlier models, not to Opus 5.5 and models released after it. Elsewhere it applies to every model.
+const topApplies = (src, m) => src.kind !== 'user' || !/-5-5$/.test(m);
+const rank = l => EFFORT_LEVELS.indexOf(l);
+export function savedEffortOf(settings, m) {
+  let level = null, from = null, cap = null, capFrom = null;
+  for (const src of settings.sources) {
+    const e = entryFor(src, m);
+    const l = e?.effortLevel ?? (topApplies(src, m) ? src.effortLevel : null);
+    if (l && !level) { level = l; from = src.where; }
+    const c = e?.maxEffortLevel ?? src.maxEffortLevel;
+    if (c && c !== 'max' && (cap == null || rank(c) < rank(cap))) { cap = c; capFrom = src.where; }
+  }
+  return { level, from, cap, capFrom };
+}
+export function expectedEffortOf(seat, models, sessionEffort, effortOverride, settings) {
+  const m = seatModelId(models, seat), main = bareId(models?.main);
+  if (effortOverride) return { level: effortOverride, source: 'CLAUDE_CODE_EFFORT_LEVEL', model: m, fromSettings: false };
+  const saved = m ? savedEffortOf(settings, m) : { cap: null };
+  const capped = l => (l && saved.cap && rank(l) > rank(saved.cap) ? saved.cap : l);
+  const cap = saved.cap ? `capped at ${saved.cap} by ${saved.capFrom}` : null;
+  if (seat.effort) return { level: capped(seat.effort), source: 'asked for', model: m, fromSettings: false, cap: saved.cap && rank(seat.effort) > rank(saved.cap) ? cap : null };
+  if (!m || m === main) return { level: sessionEffort, source: sessionEffort ? "the session's level" : "the session's level, which CLAUDE_EFFORT didn't give", model: m, fromSettings: false };
+  const unchecked = settings.userChecked ? '' : '; user settings not checked, and a level saved there may apply';
+  if (saved.level) return { level: capped(saved.level), source: `saved for ${m} in ${saved.from}`, model: m, fromSettings: true, cap: saved.cap && rank(saved.level) > rank(saved.cap) ? cap : null };
+  const d = defaultEffortOf(m);
+  return { level: capped(d), source: `${m}'s default${unchecked || ', with no level saved for it in the settings files read'}`, model: m, fromSettings: true, cap: saved.cap && rank(d) > rank(saved.cap) ? cap : null };
+}
+
 // One line per seat for Claude to show the user before the run: its model and effort, each marked
 // explicit (with the option that set it) or default.
 export function seatSummaryOf(seats, models, sessionEffort, effortOverride) {
@@ -450,10 +566,11 @@ export function seatSummaryOf(seats, models, sessionEffort, effortOverride) {
     const model = x.model
       ? `model ${x.model} (explicit, ${x.modelSource})${models?.force && models.env && models.env !== x.model ? `, but CLAUDE_CODE_SUBAGENT_MODEL_FORCE makes it ${models.env}` : ''}`
       : `model: default, ${x.runsOn === 'inherit' ? "the session's model" : models?.env && models.env !== 'inherit' ? `${x.runsOn} (from CLAUDE_CODE_SUBAGENT_MODEL)` : `the session's, ${x.runsOn}`}`;
+    const e = x.expected;
     const effort = effortOverride
       ? `effort ${effortOverride} (CLAUDE_CODE_EFFORT_LEVEL overrides ${x.effort ? `the ${x.effort} asked for` : 'every seat'})`
-      : x.effort ? `effort ${x.effort} (explicit, ${x.effortSource})`
-      : `effort: default, ${x.model ? `that model's default if it isn't the session's model, otherwise the session's level (${sessionEffort ?? 'not recorded'})` : `the session's level (${sessionEffort ?? 'not recorded'})`}`;
+      : x.effort ? `effort ${e.level ?? x.effort} (explicit, ${x.effortSource}${e.cap ? `; ${e.cap}` : ''})`
+      : `effort: default, ${e.level ? `${e.level} (${e.source}${e.cap ? `; ${e.cap}` : ''})` : `not known (${e.source})`}`;
     return `${x.seat}: ${model}; ${effort}`;
   });
 }
@@ -470,14 +587,17 @@ export function buildPlan(o, target, now = new Date(), usedIds = new Set(), env 
   // A log crowded with today's ids (planted, or very busy): look for a free one in order, or stop.
   for (let i = 0; i < 0x10000 && runId == null; i++) { const id = `${day}-${i.toString(16).padStart(4, '0')}`; if (!usedIds.has(id)) runId = id; }
   if (runId == null) throw new Error('every run id for today is already in the review log; try again tomorrow or use another --log-dir');
-  const reviewers = Array.from({ length: n }, (_, i) => ({ label: roles ? `reviewer: ${roles[i]}` : `reviewer ${i + 1}`, role: roles ? roles[i] : 'generalist', brief: reviewerBrief(t, roles ? roles[i] : null, i + 1, n, o.sequential) }));
+  const v = ctype.briefVersion;
+  const reviewers = Array.from({ length: n }, (_, i) => ({ label: roles ? `reviewer: ${roles[i]}` : `reviewer ${i + 1}`, role: roles ? roles[i] : 'generalist', brief: reviewerBrief(t, roles ? roles[i] : null, i + 1, n, o.sequential, v) }));
   const steps = [{ step: 'review', how: o.sequential ? 'one at a time, in order; give each reviewer the earlier reports after its brief, each in a <report from="..."> block' : 'all at once, independently; no reviewer sees another\'s report', agents: reviewers }];
-  if (o.debate) steps.push({ step: 'debate', how: 'one round: give each debate agent every review report after this brief, each in a <report from="..."> block, with the one from its own seat marked YOURS; start them all at once', agents: reviewers.map(r => ({ label: `${r.label} (debate)`, role: r.role, brief: debateBrief(t, r.role, r.label, n) })) });
-  if (o.combine === 'judged') steps.push({ step: 'combine', how: 'a fresh judge agent that wrote none of the reports; give it every report (and debate response) after this brief, each in a <report from="..."> block', agents: [{ label: 'judge', role: 'judge', brief: judgeBrief(t, n, o.debate) }] });
-  if (appeal) steps.push({ step: 'appeal', how: 'after the judge, only if it marked any finding NOT REAL (otherwise skip this agent and say so): a fresh agent that is not a reviewer or the judge; give it, after this brief, the judge\'s NOT REAL findings, each with the judge\'s reasons, in one <dismissed from="judge"> block, then where the material is. Never give it the reviewers\' reports, any other brief or the description of what to review. It doesn\'t overrule the judge: report each finding it marks WRONGLY DISMISSED or UNSURE with both views, and let the user make the call', agents: [{ label: 'appeal', role: 'appeal', brief: appealBrief() }] });
+  if (o.debate) steps.push({ step: 'debate', how: 'one round: give each debate agent every review report after this brief, each in a <report from="..."> block, with the one from its own seat marked YOURS; start them all at once', agents: reviewers.map(r => ({ label: `${r.label} (debate)`, role: r.role, brief: debateBrief(t, r.role, r.label, n, v) })) });
+  if (o.combine === 'judged') steps.push({ step: 'combine', how: 'a fresh judge agent that wrote none of the reports; give it every report (and debate response) after this brief, each in a <report from="..."> block', agents: [{ label: 'judge', role: 'judge', brief: judgeBrief(t, n, o.debate, v) }] });
+  if (appeal) steps.push({ step: 'appeal', how: v >= 3
+    ? 'after the judge, if it marked any finding NOT REAL, ruled any OVERSTATED or UNDERSTATED, or kept any other at LOW (otherwise skip this agent and say so): a fresh agent that is not a reviewer or the judge; give it, after this brief, the judge\'s NOT REAL findings, each with its title, file and line, what it claimed and the judge\'s reasons, in one <dismissed from="judge"> block, and the severity findings (every OVERSTATED or UNDERSTATED finding, and every other finding kept at LOW), each with its number, title, file and line, what it claimed, each reviewer seat that raised it with the severity it gave, the judge\'s severity and the judge\'s reason or "no reason given", in one <severity from="judge"> block, leaving out a block that would be empty; then where the material is. Never give it the reviewers\' reports, any other brief, the description of what to review, or any model or effort. It doesn\'t overrule the judge: report each finding it marks WRONGLY DISMISSED, TOO LOW, TOO HIGH or UNSURE with both views, and let the user make the call'
+    : 'after the judge, only if it marked any finding NOT REAL (otherwise skip this agent and say so): a fresh agent that is not a reviewer or the judge; give it, after this brief, the judge\'s NOT REAL findings, each with the judge\'s reasons, in one <dismissed from="judge"> block, then where the material is. Never give it the reviewers\' reports, any other brief or the description of what to review. It doesn\'t overrule the judge: report each finding it marks WRONGLY DISMISSED or UNSURE with both views, and let the user make the call', agents: [{ label: 'appeal', role: 'appeal', brief: appealBrief(v) }] });
   if (o.combine === 'pooled') steps.push({ step: 'combine', how: `no agent: you (the main session) list every finding from every report${o.debate ? ', and the new findings from the debate round' : ''}, merging exact duplicates only; nothing is dropped or verified`, agents: [] });
   if (o.combine === 'consensus') steps.push({ step: 'combine', how: `no agent: you (the main session) match findings across reports; keep those raised by at least ${Math.floor(n / 2) + 1} of ${n} reviewers${o.debate ? ' (counting AGREE in the debate round)' : ''} as the council's findings, and list the rest as minority findings`, agents: [] });
-  if (o.baseline) steps.push({ step: 'baseline', how: 'start this agent together with the reviewers (in the same message as the review step), give it the material only, and never show it the council\'s reports; its findings are kept separate for comparison', agents: [{ label: 'baseline reviewer', role: 'baseline', brief: baselineBrief(t) }] });
+  if (o.baseline) steps.push({ step: 'baseline', how: 'start this agent together with the reviewers (in the same message as the review step), give it the material only, and never show it the council\'s reports; its findings are kept separate for comparison', agents: [{ label: 'baseline reviewer', role: 'baseline', brief: baselineBrief(t, v) }] });
   const warnings = [];
   if (o.combine === 'consensus' && (o.sequential || o.reviewers === 'specialised')) warnings.push(`consensus with ${o.sequential ? 'sequential reviewers (told not to repeat each other)' : 'specialised reviewers (each on its own area)'} keeps few findings, because reviewers rarely raise the same one`);
   warnings.push(...modelWarnings);
@@ -490,17 +610,28 @@ export function buildPlan(o, target, now = new Date(), usedIds = new Set(), env 
   // (null: leave the parameter out). They never go into a brief, so the judge and the appeal can't tell
   // which model or effort produced a report.
   const seatOf = l => seats.find(x => x.seat === seatOfLabel(l));
-  for (const st of steps) for (const a of st.agents) { const x = seatOf(a.label); a.model = x.model; a.effort = x.effort; }
+  // Brief version 3 forbids running anything unless the user allowed running code, and plan enforces it:
+  // every agent is the plugin's read-only agent (Read, Grep and Glob only) unless --allow-running-code
+  // is given. Version 2 runs keep the general-purpose agent they always had, so they stay comparable.
+  const toolLimits = v >= 3 && !o.allowRunningCode;
+  const agentType = toolLimits ? READER_AGENT : 'general-purpose';
+  for (const st of steps) for (const a of st.agents) { const x = seatOf(a.label); a.model = x.model; a.effort = x.effort; a.agentType = agentType; }
   const explicitEffort = seats.filter(x => x.effort);
   if (effortOverride && explicitEffort.length) warnings.push(`because CLAUDE_CODE_EFFORT_LEVEL is set, the effort asked for these seats won't apply: ${explicitEffort.map(x => `${x.seat} (${x.effort})`).join(', ')}`);
-  const seatList = seats.map(x => ({ seat: x.seat, model: x.model, modelSource: x.modelSource, runsOn: seatRunsOn(models, x), effort: x.effort, effortSource: x.effortSource }));
+  const settings = effortSettingsOf(o.project ?? process.cwd(), env, { readUser: o.readEffortSettings, managedDir: o.managedSettingsDir });
+  const seatList = seats.map(x => ({ seat: x.seat, model: x.model, modelSource: x.modelSource, runsOn: seatRunsOn(models, x), effort: x.effort, effortSource: x.effortSource, expected: expectedEffortOf(x, models, sessionEffort, effortOverride, settings) }));
+  const dependsOnSettings = seatList.filter(x => x.expected.fromSettings);
+  if (!settings.userChecked && dependsOnSettings.length) warnings.push(`user settings weren't checked (plan with --read-effort-settings to check them), so a level saved there for ${[...new Set(dependsOnSettings.map(x => x.expected.model))].join(', ')} may apply to ${dependsOnSettings.map(x => x.seat).join(', ')}`);
+  for (const w of settings.warnings) warnings.push(w);
   return {
-    runId, version: VERSION, label, target: t, sessionEffort, effortOverride,
+    runId, version: v, label, target: t, sessionEffort, effortOverride,
+    runningCode: o.allowRunningCode ? 'allowed' : 'not allowed', toolLimits, agentType,
+    effortSettings: { checked: settings.checked, userChecked: settings.userChecked },
     seats: seatList, seatSummary: seatSummaryOf(seatList, models, sessionEffort, effortOverride),
     type: { reviewers: o.reviewers, n, roles, combine: o.combine, debate: o.debate, sequential: o.sequential, baseline: o.baseline, appeal, models, effort: ctype.effort, seats: ctype.seats },
     agentCount, agentModel: o.model ?? null, steps, warnings,
     resultsTemplate: {
-      findingsPerReviewer: reviewers.map(() => 0), findingsCombined: 0, confirmed: 0, overstated: 0, dismissed: 0, verified: null, severity: { high: 0, med: 0, low: 0 }, baseline: o.baseline ? { findings: 0, confirmed: 0, alsoFoundByCouncil: 0 } : null, appeal: appeal ? { ran: false, reviewed: 0, items: [] } : null,
+      findingsPerReviewer: reviewers.map(() => 0), findingsCombined: 0, confirmed: 0, ...(v >= 3 ? { partlyReal: 0 } : {}), overstated: 0, ...(v >= 3 ? { understated: 0 } : {}), dismissed: 0, verified: null, severity: { high: 0, med: 0, low: 0 }, baseline: o.baseline ? { findings: 0, confirmed: 0, alsoFoundByCouncil: 0 } : null, appeal: appeal ? { ran: false, reviewed: 0, items: [], ...(v >= 3 ? { severityReviewed: 0, severityItems: [] } : {}) } : null,
       agents: steps.flatMap(s => s.agents.map(a => ({ label: a.label, step: s.step, model: a.model ?? 'inherit', effort: a.effort, tokens: null, toolUses: null, durationMs: null }))),
       severityChanges: o.combine === 'judged' ? [] : null, deviations: [], wallMinutes: null, notes: '',
     },
@@ -581,15 +712,15 @@ function checkDeviations(list) {
   });
 }
 
-export function checkResults(r, strict = true) {
+export function checkResults(r, strict = true, version = 2) {
   if (!r || typeof r !== 'object' || Array.isArray(r)) throw new Error('give the results as a JSON object on stdin (the plan\'s resultsTemplate shows the fields)');
   if (r.findingsPerReviewer != null && !Array.isArray(r.findingsPerReviewer)) throw new Error('findingsPerReviewer must be a list of numbers');
   const per = (r.findingsPerReviewer || []).map((x, i) => int(x, `findingsPerReviewer[${i}]`));
   const out = {
-    findingsPerReviewer: per, findingsCombined: int(r.findingsCombined, 'findingsCombined'), confirmed: int(r.confirmed, 'confirmed'), overstated: int(r.overstated, 'overstated'), dismissed: int(r.dismissed, 'dismissed'),
+    findingsPerReviewer: per, findingsCombined: int(r.findingsCombined, 'findingsCombined'), confirmed: int(r.confirmed, 'confirmed'), partlyReal: int(r.partlyReal, 'partlyReal'), overstated: int(r.overstated, 'overstated'), understated: int(r.understated, 'understated'), dismissed: int(r.dismissed, 'dismissed'),
     severity: { high: int(r.severity?.high, 'severity.high'), med: int(r.severity?.med, 'severity.med'), low: int(r.severity?.low, 'severity.low') },
     baseline: r.baseline && typeof r.baseline === 'object' ? { findings: int(r.baseline.findings, 'baseline.findings'), confirmed: int(r.baseline.confirmed, 'baseline.confirmed'), alsoFoundByCouncil: int(r.baseline.alsoFoundByCouncil, 'baseline.alsoFoundByCouncil') } : null,
-    appeal: checkAppeal(r.appeal),
+    appeal: checkAppeal(r.appeal, version, strict),
     agents: checkAgents(r.agents, strict),
     severityChanges: checkSeverityChanges(r.severityChanges),
     deviations: checkDeviations(r.deviations),
@@ -608,18 +739,19 @@ export function checkResults(r, strict = true) {
   } else if (Object.hasOwn(r, 'criticalPathMinutes')) Object.assign(out, { wallMinutes: mins(r.wallMinutes, 'wallMinutes'), criticalPathMinutes: mins(r.criticalPathMinutes, 'criticalPathMinutes'), unlabelledMinutes: null });
   else Object.assign(out, { wallMinutes: null, criticalPathMinutes: null, unlabelledMinutes: mins(r.wallMinutes, 'wallMinutes') });
   if (r.verified != null && typeof r.verified !== 'boolean') throw new Error('verified must be true, false or left out');
-  const checked = out.confirmed + out.overstated + out.dismissed;
+  const checked = out.confirmed + out.partlyReal + out.overstated + out.understated + out.dismissed;
   // verified: true is accepted only when every combined finding was checked (confirmed + overstated +
   // dismissed add up to findingsCombined). Left out, a run with findings but none of the three counted
   // is unverified.
-  if (strict && r.verified === true && checked !== out.findingsCombined) throw new Error('verified is true, but confirmed + overstated + dismissed don\'t add up to findingsCombined; check every finding, or set verified to false');
+  if (strict && version < 3 && (out.partlyReal || out.understated)) throw new Error(`brief version ${version} has no PARTLY REAL or UNDERSTATED rulings; leave partlyReal and understated at 0`);
+  if (strict && r.verified === true && checked !== out.findingsCombined) throw new Error(`verified is true, but ${version >= 3 ? 'confirmed + partlyReal + overstated + understated + dismissed don\'t' : 'confirmed + overstated + dismissed don\'t'} add up to findingsCombined; check every finding, or set verified to false`);
   out.verified = r.verified ?? !(out.findingsCombined > 0 && checked === 0);
   if (!strict) return out;
-  if (checked > out.findingsCombined) throw new Error('confirmed + overstated + dismissed is more than findingsCombined');
+  if (checked > out.findingsCombined) throw new Error(`${version >= 3 ? 'confirmed + partlyReal + overstated + understated + dismissed' : 'confirmed + overstated + dismissed'} is more than findingsCombined`);
   // Severity counts every combined finding once (a NOT REAL one at the highest severity a reviewer
   // gave it), so when they are given they add up to findingsCombined exactly.
   const sev = out.severity.high + out.severity.med + out.severity.low;
-  if (sev && sev !== out.findingsCombined) throw new Error(`the severity counts add up to ${sev}, not findingsCombined (${out.findingsCombined}); ${COUNT_RULE}`);
+  if (sev && sev !== out.findingsCombined) throw new Error(`the severity counts add up to ${sev}, not findingsCombined (${out.findingsCombined}); ${countRuleOf(version)}`);
   if (out.baseline && (out.baseline.confirmed > out.baseline.findings || out.baseline.alsoFoundByCouncil > out.baseline.findings)) throw new Error('baseline confirmed and alsoFoundByCouncil can\'t be more than baseline findings');
   if (out.appeal && out.appeal.reviewed > out.dismissed) throw new Error('appeal.reviewed can\'t be more than dismissed (the appeal sees only the findings the judge dismissed)');
   return out;
@@ -662,7 +794,38 @@ function checkAgents(list, strict = true) {
 // (WRONGLY DISMISSED or UNSURE) with the user's call on it.
 export const APPEAL_VIEWS = ['wrongly dismissed', 'unsure'];
 export const APPEAL_CALLS = ['reinstated', 'upheld', 'pending'];
-function checkAppeal(a) {
+// Brief version 3's appeal also checks severities: one item per finding in its severity block (every
+// OVERSTATED or UNDERSTATED finding, and every other finding kept at LOW), fair ones included, so how
+// often it disagrees, and on which kind, can be judged later.
+export const SEVERITY_VIEWS = ['fair', 'too low', 'too high', 'unsure'];
+export const SEVERITY_CALLS = ['kept', 'changed', 'pending'];
+function checkSeverityItems(list) {
+  if (list == null) return [];
+  if (!Array.isArray(list)) throw new Error('appeal.severityItems must be a list, one per finding in the appeal\'s severity block');
+  if (list.length > 50) throw new Error('appeal.severityItems can have at most 50 entries');
+  return list.map((x, i) => {
+    const w = `appeal.severityItems[${i}]`;
+    if (!x || typeof x !== 'object' || Array.isArray(x)) throw new Error(`${w} must be an object: {"finding": "<run id>/M4: <short title>", "reviewers": ["MED"], "judge": "LOW", "view": "too low", "appealSeverity": "MED", "call": "pending"}`);
+    const finding = clean(x.finding, 120);
+    if (!finding) throw new Error(`${w}.finding needs the finding's citation and a short title`);
+    if (!Array.isArray(x.reviewers) || !x.reviewers.length || x.reviewers.length > 9) throw new Error(`${w}.reviewers must list each reviewer's severity for it (1 to 9)`);
+    const reviewers = x.reviewers.map((v, k) => sevOf(v, `${w}.reviewers[${k}]`));
+    const judge = sevOf(x.judge, `${w}.judge`);
+    const changed = severityChangeOf(reviewers, judge) != null && SEVERITIES.indexOf(judge) !== Math.max(...reviewers.map(r => SEVERITIES.indexOf(r)));
+    if (!changed && judge !== 'low') throw new Error(`${w} isn't a severity finding: the judge kept it at ${judge.toUpperCase()}, the highest reviewer's severity, and only changed severities and LOW findings go to the appeal`);
+    if (!SEVERITY_VIEWS.includes(x.view)) throw new Error(`${w}.view must be ${SEVERITY_VIEWS.join(', ')}`);
+    let appealSeverity = x.appealSeverity == null ? null : sevOf(x.appealSeverity, `${w}.appealSeverity`);
+    if (x.view === 'too low' && !(appealSeverity && SEVERITIES.indexOf(appealSeverity) > SEVERITIES.indexOf(judge))) throw new Error(`${w}: TOO LOW needs appealSeverity above the judge's ${judge.toUpperCase()}`);
+    if (x.view === 'too high' && !(appealSeverity && SEVERITIES.indexOf(appealSeverity) < SEVERITIES.indexOf(judge))) throw new Error(`${w}: TOO HIGH needs appealSeverity below the judge's ${judge.toUpperCase()}`);
+    if (x.view === 'fair' || x.view === 'unsure') appealSeverity = null;
+    if (!SEVERITY_CALLS.includes(x.call)) throw new Error(`${w}.call must be ${SEVERITY_CALLS.join(', ')}`);
+    if (x.view === 'fair' && x.call !== 'kept') throw new Error(`${w}: the appeal found the severity fair, so call is kept`);
+    return { finding, kind: changed ? 'changed' : 'kept at low', reviewers, judge, view: x.view, appealSeverity, call: x.call };
+  });
+}
+// strict is false when a row is read back from the log, where the run's brief version isn't known here,
+// so only log (strict) checks that a version 2 run has no severity items.
+function checkAppeal(a, version = 2, strict = true) {
   if (a == null) return null;
   if (typeof a !== 'object' || Array.isArray(a)) throw new Error('appeal must be an object: {"ran": true, "reviewed": 2, "items": [...]}');
   if (a.ran != null && typeof a.ran !== 'boolean') throw new Error('appeal.ran must be true or false');
@@ -677,7 +840,14 @@ function checkAppeal(a) {
     return { finding, view: x.view, call: x.call };
   });
   const out = { ran: !!a.ran, reviewed: int(a.reviewed, 'appeal.reviewed'), items };
-  if (!out.ran && (out.reviewed || items.length)) throw new Error('appeal.ran is false, so leave appeal.reviewed at 0 and appeal.items empty');
+  const sev = checkSeverityItems(a.severityItems);
+  if (sev.length || a.severityReviewed != null) {
+    if (strict && version < 3 && sev.length) throw new Error(`brief version ${version}'s appeal checks dismissals only; leave severityItems out`);
+    out.severityReviewed = int(a.severityReviewed, 'appeal.severityReviewed');
+    out.severityItems = sev;
+    if (out.severityReviewed !== sev.length) throw new Error('appeal.severityItems must have one entry per severity finding the appeal checked, fair ones included, so it has as many as appeal.severityReviewed');
+  }
+  if (!out.ran && (out.reviewed || items.length || out.severityReviewed)) throw new Error('appeal.ran is false, so leave appeal.reviewed and appeal.severityReviewed at 0 and the items empty');
   if (items.length > out.reviewed) throw new Error('appeal.items has more entries than appeal.reviewed');
   return out;
 }
@@ -746,13 +916,15 @@ export function readLog(file) {
           });
           type.effort = EFFORT_LEVELS.includes(r.type.effort) ? r.type.effort : null;
         }
+        type.briefVersion = Number.isInteger(r.version) ? r.version : 1;
         // The label is rebuilt from the type, never taken from the line, so a planted or cut label
         // can't rename a run or merge two types.
         rows.push({ kind: 'planned', runId: r.runId, time: r.time, version: Number.isInteger(r.version) ? r.version : 1, councilDial: typeof r.councilDial === 'string' && /^\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(r.councilDial) ? r.councilDial : null, label: labelOf(type), target: clean(r.target, TARGET_MAX), type,
           // Rows from 1.3.0 have sessionEffort (null when CLAUDE_EFFORT wasn't set); older rows don't.
           effortRecorded: Object.hasOwn(r, 'sessionEffort'), sessionEffort: EFFORT_LEVELS.includes(r.sessionEffort) ? r.sessionEffort : null,
           // Rows from 1.3.8 have effortOverride (null when CLAUDE_CODE_EFFORT_LEVEL wasn't set); older rows don't.
-          overrideRecorded: Object.hasOwn(r, 'effortOverride'), effortOverride: EFFORT_OVERRIDE_VALUES.includes(r.effortOverride) ? r.effortOverride : null });
+          overrideRecorded: Object.hasOwn(r, 'effortOverride'), effortOverride: EFFORT_OVERRIDE_VALUES.includes(r.effortOverride) ? r.effortOverride : null,
+          runningCode: ['allowed', 'not allowed'].includes(r.runningCode) ? r.runningCode : null, userEffortChecked: r.effortSettings?.userChecked === true });
       } else if (r.kind === 'results') rows.push({ kind: 'results', runId: r.runId, time: r.time, results: checkResults(r.results, false) });
       else if (r.kind === 'update') rows.push({ kind: 'update', runId: r.runId, time: r.time, update: checkUpdate(r.update, false) });
       else throw new Error('bad kind');
@@ -765,7 +937,7 @@ export function readLog(file) {
 export function runsFrom(rows) {
   const runs = new Map();
   for (const r of rows) {
-    if (r.kind === 'planned') { if (!runs.has(r.runId)) runs.set(r.runId, { runId: r.runId, time: r.time, version: r.version, councilDial: r.councilDial, label: r.label, target: r.target, type: r.type, effortRecorded: r.effortRecorded, sessionEffort: r.sessionEffort, overrideRecorded: r.overrideRecorded, effortOverride: r.effortOverride, results: null, resultsLogged: 0, updates: [] }); continue; }
+    if (r.kind === 'planned') { if (!runs.has(r.runId)) runs.set(r.runId, { runId: r.runId, time: r.time, version: r.version, councilDial: r.councilDial, label: r.label, target: r.target, type: r.type, effortRecorded: r.effortRecorded, sessionEffort: r.sessionEffort, overrideRecorded: r.overrideRecorded, effortOverride: r.effortOverride, runningCode: r.runningCode, userEffortChecked: r.userEffortChecked, results: null, resultsLogged: 0, updates: [] }); continue; }
     const run = runs.get(r.runId);
     if (!run) continue;
     // Logging a run again replaces its results; resultsLogged counts how often, so the Markdown can say so.
@@ -783,11 +955,11 @@ const runUsageTotal = (type, res) => (agentsComplete(type, res) && res.agents.ev
 // Kept findings are the ones that survive judging, REAL or OVERSTATED: an OVERSTATED finding is a real
 // problem rated too high, so it counts as found. How often the judge cut a kept finding's severity
 // is reported separately, as the overstated share of kept findings.
-const kept = res => res.confirmed + res.overstated;
+const kept = res => res.confirmed + (res.partlyReal ?? 0) + res.overstated + (res.understated ?? 0);
 export function compare(runs) {
   const groups = new Map();
   for (const r of runs) {
-    const g = groups.get(r.label) || { label: r.label, planned: 0, runs: 0, verifiedRuns: 0, combined: 0, combinedVerified: 0, kept: 0, overstated: 0, dismissed: 0, wall: [0, 0], path: [0, 0], unlabelled: [0, 0], fixes: 0, failedFixes: 0, regressions: 0, rechecked: 0, baselineRuns: 0, baselineConfirmed: 0, councilKeptWithBaseline: 0, appealRuns: 0, appealReviewed: 0, appealFlagged: 0, appealReinstated: 0, appealPending: 0, usageRuns: 0, tokens: 0, appealUsageRuns: 0, appealUsage: 0 };
+    const g = groups.get(r.label) || { label: r.label, planned: 0, runs: 0, verifiedRuns: 0, combined: 0, combinedVerified: 0, kept: 0, overstated: 0, dismissed: 0, wall: [0, 0], path: [0, 0], unlabelled: [0, 0], fixes: 0, failedFixes: 0, regressions: 0, rechecked: 0, baselineRuns: 0, baselineConfirmed: 0, councilKeptWithBaseline: 0, appealRuns: 0, appealReviewed: 0, appealFlagged: 0, appealReinstated: 0, appealPending: 0, understated: 0, sevRuns: 0, sevChanged: 0, sevChangedFlagged: 0, sevLow: 0, sevLowFlagged: 0, sevChangedByUser: 0, usageRuns: 0, tokens: 0, appealUsageRuns: 0, appealUsage: 0 };
     g.planned++;
     groups.set(r.label, g);
     if (!r.results) continue;
@@ -795,7 +967,7 @@ export function compare(runs) {
     g.runs++; g.combined += res.findingsCombined;
     // Each measure of minutes is averaged only over the runs that have it, never mixed.
     for (const [k, v] of [['wall', res.wallMinutes], ['path', res.criticalPathMinutes], ['unlabelled', res.unlabelledMinutes]]) if (v != null) { g[k][0]++; g[k][1] += v; }
-    if (res.verified) { g.verifiedRuns++; g.combinedVerified += res.findingsCombined; g.kept += kept(res); g.overstated += res.overstated; g.dismissed += res.dismissed; }
+    if (res.verified) { g.verifiedRuns++; g.combinedVerified += res.findingsCombined; g.kept += kept(res); g.overstated += res.overstated; g.understated += res.understated ?? 0; g.dismissed += res.dismissed; }
     if (r.updates.length) g.rechecked++;
     for (const u of r.updates) { g.fixes += u.fixesMade; g.failedFixes += u.fixesFailedRecheck; g.regressions += u.regressions; }
     if (res.baseline && res.verified) { g.baselineRuns++; g.baselineConfirmed += res.baseline.confirmed; g.councilKeptWithBaseline += kept(res); }
@@ -805,6 +977,16 @@ export function compare(runs) {
       const a = r.results.appeal;
       g.appealRuns++; g.appealReviewed += a.reviewed; g.appealFlagged += a.items.length;
       g.appealReinstated += a.items.filter(x => x.call === 'reinstated').length; g.appealPending += a.items.filter(x => x.call === 'pending').length;
+      // The severity check, split by kind, so the LOW findings with no severity change, the part that
+      // costs most, can be judged on how often the appeal disagrees with the judge there.
+      if (a.severityItems) {
+        g.sevRuns++;
+        for (const x of a.severityItems) {
+          const flagged = x.view !== 'fair';
+          if (x.kind === 'changed') { g.sevChanged++; if (flagged) g.sevChangedFlagged++; } else { g.sevLow++; if (flagged) g.sevLowFlagged++; }
+          if (x.call === 'changed') g.sevChangedByUser++;
+        }
+      }
     }
     // The appeal agent's tokens count only from a run whose total counts, so both figures come from
     // the same runs (a complete run lists every agent with its tokens).
@@ -820,11 +1002,11 @@ export function compare(runs) {
     label: g.label, runs: g.runs,
     findingsPerRun: g.runs ? one(g.combined / g.runs) : null,
     keptPercent: ratio(g.kept, g.combinedVerified), dismissedPercent: ratio(g.dismissed, g.combinedVerified),
-    overstatedOfKeptPercent: ratio(g.overstated, g.kept),
+    overstatedOfKeptPercent: ratio(g.overstated, g.kept), understatedOfKeptPercent: ratio(g.understated, g.kept),
     minutes: { wall: avg(g.wall), criticalPath: avg(g.path), unlabelled: avg(g.unlabelled) },
     fixesFailedRecheckPercent: ratio(g.failedFixes, g.fixes), regressionsPerRecheckedRun: g.rechecked ? one(g.regressions / g.rechecked) : null,
     baseline: g.baselineRuns ? { runs: g.baselineRuns, councilKeptPerRun: one(g.councilKeptWithBaseline / g.baselineRuns), baselineConfirmedPerRun: one(g.baselineConfirmed / g.baselineRuns) } : null,
-    appeal: g.appealRuns ? { runs: g.appealRuns, dismissedChecked: g.appealReviewed, flagged: g.appealFlagged, reinstated: g.appealReinstated, pending: g.appealPending } : null,
+    appeal: g.appealRuns ? { runs: g.appealRuns, dismissedChecked: g.appealReviewed, flagged: g.appealFlagged, reinstated: g.appealReinstated, pending: g.appealPending, ...(g.sevRuns ? { severity: { runs: g.sevRuns, changedChecked: g.sevChanged, changedFlagged: g.sevChangedFlagged, lowUnchangedChecked: g.sevLow, lowUnchangedFlagged: g.sevLowFlagged, changedByUser: g.sevChangedByUser } } : {}) } : null,
     tokensPerRun: g.usageRuns ? Math.round(g.tokens / g.usageRuns) : null, usageRuns: g.usageRuns,
     appealUsagePerRun: g.appealUsageRuns ? Math.round(g.appealUsage / g.appealUsageRuns) : null,
     unverifiedRuns: g.runs - g.verifiedRuns, unfinishedRuns: g.planned - g.runs,
@@ -883,7 +1065,8 @@ function markdown(runs) {
     L.push('| Run | Date | Type | Target | Findings | Kept (overstated) | Dismissed | Minutes | Total tokens | Fixes failed recheck | Baseline confirmed | Appeal |', '|---|---|---|---|---|---|---|---|---|---|---|---|');
     for (const r of runs) {
       const res = r.results, fx = r.updates.reduce((a, u) => ({ made: a.made + u.fixesMade, failed: a.failed + u.fixesFailedRecheck }), { made: 0, failed: 0 });
-      const ap = r.type.appeal && res?.appeal ? (res.appeal.ran ? `${res.appeal.items.length} of ${res.appeal.reviewed} flagged, ${res.appeal.items.filter(x => x.call === 'reinstated').length} reinstated` : 'nothing dismissed') : '-';
+      const sv = res?.appeal?.severityItems?.length ? `; severity ${res.appeal.severityItems.filter(x => x.view !== 'fair').length} of ${res.appeal.severityItems.length} flagged, ${res.appeal.severityItems.filter(x => x.call === 'changed').length} changed` : '';
+      const ap = r.type.appeal && res?.appeal ? (res.appeal.ran ? `${res.appeal.items.length} of ${res.appeal.reviewed} flagged, ${res.appeal.items.filter(x => x.call === 'reinstated').length} reinstated${sv}` : (r.version >= 3 ? 'nothing to check' : 'nothing dismissed')) : '-';
       // The tokens reported, marked whenever the total isn't the run's whole total (and so isn't counted
       // in tokens per run): "k of n agents" when fewer than the run's agents have them, whether an
       // agent's tokens are missing or the agent was left out; "k listed, run had n" when the row lists
@@ -897,15 +1080,21 @@ function markdown(runs) {
       const tok = known.length ? `${known.reduce((s, x) => s + x.tokens, 0)}${mark}` : '-';
       const min = res ? minutesText(res.wallMinutes, res.criticalPathMinutes, res.unlabelledMinutes) : '-';
       const found = res ? `${res.findingsCombined}${r.resultsLogged > 1 ? ' (re-logged)' : ''}` : 'not logged';
-      L.push(`| ${r.runId} | ${cell(r.time.slice(0, 10))} | ${cell(r.label)} | ${cell(r.target)} | ${found} | ${res ? (res.verified ? `${kept(res)} (${res.overstated})` : 'unverified') : '-'} | ${res ? (res.verified ? res.dismissed : '-') : '-'} | ${min} | ${tok} | ${r.updates.length ? `${fx.failed} of ${fx.made}` : '-'} | ${res?.baseline ? res.baseline.confirmed : '-'} | ${ap} |`);
+      L.push(`| ${r.runId} | ${cell(r.time.slice(0, 10))} | ${cell(r.label)} | ${cell(r.target)} | ${found} | ${res ? (res.verified ? `${kept(res)} (${res.overstated}${res.understated ? `, ${res.understated} raised` : ''})` : 'unverified') : '-'} | ${res ? (res.verified ? res.dismissed : '-') : '-'} | ${min} | ${tok} | ${r.updates.length ? `${fx.failed} of ${fx.made}` : '-'} | ${res?.baseline ? res.baseline.confirmed : '-'} | ${ap} |`);
     }
     L.push('');
-    const noted = runs.filter(r => r.results && (r.results.severityChanges?.length || r.results.deviations?.length || r.results.agents?.some(a => a.reportUnescaped)));
+    const noted = runs.filter(r => r.results && (r.results.severityChanges?.length || r.results.deviations?.length || r.results.agents?.some(a => a.reportUnescaped) || r.results.appeal?.severityItems?.length));
     if (noted.length) {
-      L.push('## Severity changes, deviations and unescaped reports', '');
+      L.push('## Severity changes, severity appeals, deviations and unescaped reports', '');
       for (const r of noted) {
         const res = r.results, parts = [];
         if (res.severityChanges?.length) parts.push(`${res.severityChanges.length} severity ${res.severityChanges.length === 1 ? 'change' : 'changes'}: ${res.severityChanges.map(x => `${cell(x.finding)} ${x.reviewers.map(v => v.toUpperCase()).join('/')} to ${x.judge.toUpperCase()} (${x.change}${x.reason ? '' : ', no reason given'})`).join('; ')}`);
+        // Every severity verdict the appeal gave, fair ones included, split by kind.
+        const si = res.appeal?.severityItems ?? [];
+        if (si.length) {
+          const kind = k => si.filter(x => x.kind === k), fl = l => l.filter(x => x.view !== 'fair').length;
+          parts.push(`Appeal on severity: ${si.length} checked (${kind('changed').length} changed severities, ${fl(kind('changed'))} flagged; ${kind('kept at low').length} unchanged LOW findings, ${fl(kind('kept at low'))} flagged): ${si.map(x => `${cell(x.finding)} judge ${x.judge.toUpperCase()}, ${x.view.toUpperCase()}${x.appealSeverity ? ` (${x.appealSeverity.toUpperCase()})` : ''}${x.view === 'fair' ? '' : `, ${x.call}`}`).join('; ')}`);
+        }
         if (res.deviations?.length) parts.push(`${res.deviations.length} ${res.deviations.length === 1 ? 'deviation' : 'deviations'} from SKILL.md (their exact text is in review-log.jsonl)`);
         const un = (res.agents || []).filter(a => a.reportUnescaped).map(a => cell(a.label));
         if (un.length) parts.push(`Reports unescaped from a completion notice: ${un.join(', ')}`);
@@ -921,9 +1110,9 @@ function markdown(runs) {
     const runsOf = k => `${k} ${k === 1 ? 'run' : 'runs'}`;
     const minCell = m => [m.wall && `wall ${m.wall.perRun} (${runsOf(m.wall.runs)})`, m.criticalPath && `critical path ${m.criticalPath.perRun} (${runsOf(m.criticalPath.runs)})`, m.unlabelled && `unlabelled ${m.unlabelled.perRun} (${runsOf(m.unlabelled.runs)})`].filter(Boolean).join(', ') || '-';
     L.push('| Type | Runs | Findings per run | Kept | Dismissed | Kept but severity cut | Minutes per run | Total tokens per run (appeal agent) | Fixes that failed recheck | Regressions per rechecked run | Council kept vs baseline confirmed (per run) | Appeal: dismissals flagged, reinstated | Unverified runs | Planned, not logged |', '|---|---|---|---|---|---|---|---|---|---|---|---|---|---|');
-    for (const g of c) L.push(`| ${cell(g.label)} | ${g.runs} | ${dash(g.findingsPerRun)} | ${pct(g.keptPercent)} | ${pct(g.dismissedPercent)} | ${pct(g.overstatedOfKeptPercent)} | ${minCell(g.minutes)} | ${g.tokensPerRun == null ? '-' : `${g.tokensPerRun}${g.appealUsagePerRun != null ? ` (${g.appealUsagePerRun})` : ''}`} | ${pct(g.fixesFailedRecheckPercent)} | ${dash(g.regressionsPerRecheckedRun)} | ${g.baseline ? `${g.baseline.councilKeptPerRun} vs ${g.baseline.baselineConfirmedPerRun} (${runsOf(g.baseline.runs)})` : '-'} | ${g.appeal ? `${g.appeal.flagged} of ${g.appeal.dismissedChecked}, ${g.appeal.reinstated} reinstated${g.appeal.pending ? `, ${g.appeal.pending} pending` : ''}` : '-'} | ${g.unverifiedRuns} | ${g.unfinishedRuns} |`);
+    for (const g of c) L.push(`| ${cell(g.label)} | ${g.runs} | ${dash(g.findingsPerRun)} | ${pct(g.keptPercent)} | ${pct(g.dismissedPercent)} | ${pct(g.overstatedOfKeptPercent)}${g.understatedOfKeptPercent ? ` (raised: ${pct(g.understatedOfKeptPercent)})` : ''} | ${minCell(g.minutes)} | ${g.tokensPerRun == null ? '-' : `${g.tokensPerRun}${g.appealUsagePerRun != null ? ` (${g.appealUsagePerRun})` : ''}`} | ${pct(g.fixesFailedRecheckPercent)} | ${dash(g.regressionsPerRecheckedRun)} | ${g.baseline ? `${g.baseline.councilKeptPerRun} vs ${g.baseline.baselineConfirmedPerRun} (${runsOf(g.baseline.runs)})` : '-'} | ${g.appeal ? `${g.appeal.flagged} of ${g.appeal.dismissedChecked}, ${g.appeal.reinstated} reinstated${g.appeal.pending ? `, ${g.appeal.pending} pending` : ''}${g.appeal.severity ? `; severity: ${g.appeal.severity.changedFlagged} of ${g.appeal.severity.changedChecked} changed and ${g.appeal.severity.lowUnchangedFlagged} of ${g.appeal.severity.lowUnchangedChecked} unchanged LOW flagged, ${g.appeal.severity.changedByUser} changed by you` : ''}` : '-'} | ${g.unverifiedRuns} | ${g.unfinishedRuns} |`);
     if (c.more) L.push('', `(${c.more} more types not shown.)`);
-    L.push('', 'Kept is the share of combined findings that survived checking, REAL or OVERSTATED (an OVERSTATED finding is a real problem rated too high); dismissed is the share marked NOT REAL. Kept but severity cut is the share of kept findings marked OVERSTATED, which shows how far the reviewers\' severities had to be corrected. All three count only verified runs. The baseline\'s findings are counted confirmed or not, with no OVERSTATED bucket, so a real baseline finding counts as confirmed even if its severity was too high; its confirmed count is the counterpart of the council\'s kept count.', '', 'Minutes are of two kinds and never averaged together: wall time, from the start to when the last agent finished, and the critical path, worked out from the agents\' reported times (the slowest reviewer, then each later step), which leaves out Claude\'s own time between steps. Both are wall-clock time: an agent\'s reported duration includes any time it spent waiting for you to approve a permission prompt (in Claude Code\'s Manual mode), so neither is pure model time. Minutes logged before Council Dial 1.3.0 are unlabelled, because they could be either; logging the run again labels them.', '', 'Total tokens per run count only runs where every agent the run had is listed with the tokens Claude Code reported for it, and so does the appeal agent\'s figure in brackets. A type ending in @ and a model was run on that model (as asked for; Claude Code doesn\'t report the model a subagent actually ran on to the main session); one ending in @{...} gives each seat\'s model, and /low, /high and so on give an effort level that was set for a seat. Small numbers of runs say little; compare types on the same kind of target.', '', 'Where a run\'s reports were saved, they are in the folder named by its run id, next to this file. Finding numbers restart in every run, so cite them with the run id, such as 20261107-2f23/M12.', '');
+    L.push('', 'Kept is the share of combined findings that survived checking, REAL or OVERSTATED (an OVERSTATED finding is a real problem rated too high); dismissed is the share marked NOT REAL. Kept but severity cut is the share of kept findings marked OVERSTATED, which shows how far the reviewers\' severities had to be corrected; with brief version 3, "raised" is the share marked UNDERSTATED, rated higher than any reviewer did. Brief version 3 types end in v3 and are kept apart from version 2 types. In version 3 the appeal also checks severities: the table shows how often it disagreed on the severities the judge changed, and on the LOW findings it left unchanged, separately, so you can judge whether checking those is worth its cost. All three count only verified runs. The baseline\'s findings are counted confirmed or not, with no OVERSTATED bucket, so a real baseline finding counts as confirmed even if its severity was too high; its confirmed count is the counterpart of the council\'s kept count.', '', 'Minutes are of two kinds and never averaged together: wall time, from the start to when the last agent finished, and the critical path, worked out from the agents\' reported times (the slowest reviewer, then each later step), which leaves out Claude\'s own time between steps. Both are wall-clock time: an agent\'s reported duration includes any time it spent waiting for you to approve a permission prompt (in Claude Code\'s Manual mode), so neither is pure model time. Minutes logged before Council Dial 1.3.0 are unlabelled, because they could be either; logging the run again labels them.', '', 'Total tokens per run count only runs where every agent the run had is listed with the tokens Claude Code reported for it, and so does the appeal agent\'s figure in brackets. A type ending in @ and a model was run on that model (as asked for; Claude Code doesn\'t report the model a subagent actually ran on to the main session); one ending in @{...} gives each seat\'s model, and /low, /high and so on give an effort level that was set for a seat. Small numbers of runs say little; compare types on the same kind of target.', '', 'Where a run\'s reports were saved, they are in the folder named by its run id, next to this file. Finding numbers restart in every run, so cite them with the run id, such as 20261107-2f23/M12.', '');
   }
   return L.join('\n');
 }
@@ -1038,7 +1227,10 @@ export function setupOf(run) {
   const version = run.councilDial ?? (run.version === 1 ? '1.0.0' : t.models ? '1.2.0' : '1.1.0');
   const source = run.councilDial ? 'recorded' : 'inferred (planned before Council Dial recorded its version)';
   try { checkTarget(run.target); } catch { notes.push('Its description of what was reviewed would now be refused, because it says the material has planted, deliberate or known problems; describe the material only when you rerun it.'); }
-  if (run.version !== VERSION) notes.push(`This run used brief version ${run.version}; Council Dial ${PLUGIN_VERSION} writes version ${VERSION}, so a rerun with it gets different briefs. Install Council Dial ${version} to rerun it exactly.`);
+  if (BRIEF_VERSIONS.includes(run.version)) { if (run.version !== VERSION) args.push('--brief-version', q(run.version)); }
+  else notes.push(`This run used brief version ${run.version}; Council Dial ${PLUGIN_VERSION} writes versions ${BRIEF_VERSIONS.join(' and ')}, so a rerun with it gets different briefs. Install Council Dial ${version} to rerun it exactly.`);
+  if (run.runningCode === 'allowed') args.push('--allow-running-code');
+  if (run.userEffortChecked) args.push('--read-effort-settings');
   if (!t.models) notes.push('Its models weren\'t recorded (it was planned before Council Dial 1.2.0), so a rerun can\'t be matched on model.');
   else {
     if (t.models.env) notes.push(`CLAUDE_CODE_SUBAGENT_MODEL was ${t.models.env}${t.models.force ? ', with CLAUDE_CODE_SUBAGENT_MODEL_FORCE=1' : ''}; set it the same way.`);
@@ -1064,19 +1256,22 @@ function parseJsonInput(input) {
 
 // The only environment variables Council Dial reads, each by name: CLAUDE_CODE_SUBAGENT_MODEL and
 // CLAUDE_CODE_SUBAGENT_MODEL_FORCE, which can change the model subagents run on, CLAUDE_EFFORT, the
-// session's effort level, and CLAUDE_CODE_EFFORT_LEVEL, which overrides every other effort setting.
+// session's effort level, CLAUDE_CODE_EFFORT_LEVEL, which overrides every other effort setting, and
+// CLAUDE_CONFIG_DIR, which moves the user's settings folder (used only with --read-effort-settings).
 // Nothing else in the environment is read or passed on.
-export const ENV_NAMES = ['CLAUDE_CODE_SUBAGENT_MODEL', 'CLAUDE_CODE_SUBAGENT_MODEL_FORCE', 'CLAUDE_EFFORT', 'CLAUDE_CODE_EFFORT_LEVEL'];
+export const ENV_NAMES = ['CLAUDE_CODE_SUBAGENT_MODEL', 'CLAUDE_CODE_SUBAGENT_MODEL_FORCE', 'CLAUDE_EFFORT', 'CLAUDE_CODE_EFFORT_LEVEL', 'CLAUDE_CONFIG_DIR'];
 export function readEnv() {
   return {
     CLAUDE_CODE_SUBAGENT_MODEL: process.env.CLAUDE_CODE_SUBAGENT_MODEL,
     CLAUDE_CODE_SUBAGENT_MODEL_FORCE: process.env.CLAUDE_CODE_SUBAGENT_MODEL_FORCE,
     CLAUDE_EFFORT: process.env.CLAUDE_EFFORT,
     CLAUDE_CODE_EFFORT_LEVEL: process.env.CLAUDE_CODE_EFFORT_LEVEL,
+    CLAUDE_CONFIG_DIR: process.env.CLAUDE_CONFIG_DIR,
   };
 }
 const envNamed = e => Object.fromEntries(ENV_NAMES.map(k => [k, e?.[k]]));
 
+export const READER_AGENT = 'council-dial:council-reader';
 export function runCommand(o, input, now = new Date(), givenEnv = readEnv()) {
   if (o.input != null) input = readInputFile(o.input);
   const env = envNamed(givenEnv);
@@ -1088,7 +1283,7 @@ export function runCommand(o, input, now = new Date(), givenEnv = readEnv()) {
   switch (o.cmd) {
     case 'plan': {
       const plan = buildPlan(o, input, now, new Set(runs.map(r => r.runId)), env);
-      const warning = append(p, { kind: 'planned', runId: plan.runId, version: VERSION, councilDial: PLUGIN_VERSION, time: now.toISOString(), label: plan.label, target: plan.target, type: plan.type, sessionEffort: plan.sessionEffort, effortOverride: plan.effortOverride });
+      const warning = append(p, { kind: 'planned', runId: plan.runId, version: plan.version, councilDial: PLUGIN_VERSION, time: now.toISOString(), label: plan.label, target: plan.target, type: plan.type, sessionEffort: plan.sessionEffort, effortOverride: plan.effortOverride, runningCode: plan.runningCode, toolLimits: plan.toolLimits, effortSettings: plan.effortSettings, seatEffort: plan.seats.map(x => ({ seat: x.seat, level: x.expected.level ?? null, source: x.expected.source })) });
       return { ...plan, log: path.posix.join(p.rel, 'review-log.jsonl'), ...note, ...(warning ? { warning } : {}) };
     }
     case 'estimate': {
@@ -1099,7 +1294,7 @@ export function runCommand(o, input, now = new Date(), givenEnv = readEnv()) {
       const run = runs.find(r => r.runId === o.run);
       if (!run) throw new Error(`no planned run ${o.run} in ${p.rel}/review-log.jsonl`);
       const raw = parseJsonInput(input);
-      const results = checkResults(raw);
+      const results = checkResults(raw, true, run.version);
       if (results.findingsPerReviewer.length && results.findingsPerReviewer.length !== run.type.n) throw new Error(`findingsPerReviewer has ${results.findingsPerReviewer.length} numbers; this run had ${run.type.n} reviewers`);
       if (results.baseline && !run.type.baseline) throw new Error('this run was planned without a baseline; leave baseline out');
       if (results.appeal && !run.type.appeal) throw new Error('this run was planned without the appeal step; leave appeal out');

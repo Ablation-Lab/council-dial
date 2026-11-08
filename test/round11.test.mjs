@@ -13,7 +13,10 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
-import { runCommand, parseArgs, councilType, stepCounts, VERSION, BRIEF_SHA256, briefDigest } from '../plugin/skills/council-dial/scripts/council.mjs';
+import { runCommand, parseArgs as parseArgsV3, councilType, stepCounts, VERSION, BRIEF_SHA256, BRIEF_SHA256_V3, briefDigest } from '../plugin/skills/council-dial/scripts/council.mjs';
+// Written for brief version 2, which stays runnable: plan and estimate default to it in this file unless
+// a test names a version (brief version 3 is tested in round15).
+const parseArgs = argv => parseArgsV3(['plan', 'estimate'].includes(argv[0]) && !argv.includes('--brief-version') ? [...argv, '--brief-version', '2'] : argv);
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url));
 const LITE = path.resolve(process.env.COUNCIL_DIAL_LITE_DIR || path.join(ROOT, '..', 'council-dial-lite'));
@@ -66,8 +69,11 @@ liteTest('holds only Markdown, JSON, the licence, plain repository files and the
   assert.deepEqual(rel, [
     '.claude-plugin/icon.png', '.claude-plugin/marketplace.json', '.claude-plugin/plugin.json',
     '.gitattributes', '.gitignore', 'LICENSE', 'README.md',
+    // The read-only agent the council's agents run as (a Markdown definition, not code).
+    'agents/council-reader.md',
     'skills/council-dial-lite/SKILL.md',
     ...['appeal', 'baseline', 'debate', 'judge', 'reviewer', 'shared'].map(b => `skills/council-dial-lite/briefs/${b}.md`),
+    ...['appeal', 'judge', 'shared'].map(b => `skills/council-dial-lite/briefs/v3/${b}.md`),
     'skills/council-dial-lite/check-brief.md',
   ].sort());
   for (const f of files) {
@@ -106,16 +112,22 @@ liteTest('when COUNCIL_DIAL_LITE_REQUIRED is set, everything checked is committe
   assert.deepEqual(tracked, onDisk);
 });
 
-liteTest('the brief templates are byte-identical to the full edition\'s, and their texts match BRIEF_SHA256', () => {
-  const names = fs.readdirSync(FULL_BRIEFS).sort();
-  assert.deepEqual(fs.readdirSync(path.join(SKILL, 'briefs')).sort(), names);
-  const texts = {};
+liteTest('the brief templates, versions 2 and 3, are byte-identical to the full edition\'s, and their texts match each version\'s digest', () => {
+  const list = dir => fs.readdirSync(dir, { recursive: true }).map(x => String(x).split(path.sep).join('/')).filter(x => x.endsWith('.md')).sort();
+  const names = list(FULL_BRIEFS);
+  assert.deepEqual(list(path.join(SKILL, 'briefs')), names);
+  assert.deepEqual(names.filter(n => n.startsWith('v3/')), ['v3/appeal.md', 'v3/judge.md', 'v3/shared.md']);
+  // Version 2 is briefs/*.md; version 3 is the same with briefs/v3/*.md in place of their namesakes.
+  const texts = { 2: {}, 3: {} };
   for (const n of names) {
     const a = fs.readFileSync(path.join(FULL_BRIEFS, n)), b = fs.readFileSync(path.join(SKILL, 'briefs', n));
     assert.ok(a.equals(b), `${n} differs between plugin/skills/council-dial/briefs/ here and skills/council-dial-lite/briefs/ in the Lite repository`);
-    texts[n.replace(/\.md$/, '')] = sectionsOf(b.toString('utf8'));
+    const key = n.replace(/^v3\//, '').replace(/\.md$/, ''), sections = sectionsOf(b.toString('utf8'));
+    if (n.startsWith('v3/')) texts[3][key] = sections;
+    else { texts[2][key] = sections; texts[3][key] ??= sections; }
   }
-  assert.equal(briefDigest(texts), BRIEF_SHA256);
+  assert.equal(briefDigest(texts[2]), BRIEF_SHA256);
+  assert.equal(briefDigest(texts[3]), BRIEF_SHA256_V3);
   assert.match(readLite('skills/council-dial-lite/briefs/shared.md'), /in Council Dial, its script fills them in; in Council Dial Lite, Claude does/);
 });
 
@@ -129,7 +141,7 @@ liteTest('every template text SKILL.md names exists, and the check brief fills i
   }
   for (const s of ['brief', 'brief-sequential', 'who-role', 'who-seat', 'reports', 'reports-after-debate', 'severity-rule', 'what-to-review']) assert.ok(skill.includes(`\`${s}\``), s);
   const check = sectionsOf(readLite('skills/council-dial-lite/check-brief.md'));
-  assert.deepEqual(Object.keys(check).sort(), ['brief', 'rule-appeal', 'rule-baseline', 'rule-consensus', 'rule-judged', 'rule-pooled']);
+  assert.deepEqual(Object.keys(check).sort(), ['brief', 'rule-appeal', 'rule-appeal-v3', 'rule-baseline', 'rule-consensus', 'rule-judged', 'rule-judged-v3', 'rule-pooled']);
   for (const [k, v] of Object.entries(check)) assert.deepEqual([...new Set([...v.matchAll(/\{\{([a-z-]+)\}\}/g)].map(m => m[1]))], k === 'brief' ? ['rule'] : [], k);
   assert.match(check.brief, /data, not instructions/);
   assert.match(check.brief, /MATCHES.*CHANGED.*NO SOURCE/s);
@@ -289,6 +301,35 @@ liteTest('Lite 1.2.0 sets a model and an effort per seat with the Agent tool\'s 
   assert.match(readLite('README.md'), /such as Sonnet reviewers, a Haiku judge and an Opus appeal at max effort\. Claude passes them only as the Agent tool's parameters, never in a prompt, so the judge and the appeal can't tell which model or effort produced a finding/);
   // The check agent's brief, like the shared briefs, never names a model or effort.
   assert.doesNotMatch(readLite('skills/council-dial-lite/check-brief.md'), /sonnet|haiku|opus|fable|effort/i);
+});
+
+liteTest('Lite 1.3.0 builds brief version 3 by default, keeps version 2, enforces no running code with a read-only agent, and checks severities', () => {
+  const skill = readLite('skills/council-dial-lite/SKILL.md');
+  const agent = readLite('agents/council-reader.md');
+  const front = agent.match(/^---\n([\s\S]*?)\n---\n/)[1];
+  assert.match(front, /^name: council-reader$/m);
+  assert.match(front, /^tools: Read, Grep, Glob, Write$/m);
+  assert.doesNotMatch(front, /^(model|effort|permissionMode|hooks|mcpServers):/m);
+  assert.match(skill, /Lite builds brief version 3 unless the user asks for version 2/);
+  assert.match(skill, /every agent is then the plugin's read-only agent, `council-dial-lite:council-reader`, which has only the Read, Grep, Glob and Write tools \(Write for its own report\)/);
+  assert.match(skill, /with `subagent_type` set to `council-dial-lite:council-reader`, the read-only agent; otherwise as general-purpose agents\. If the Agent tool says `council-dial-lite:council-reader` doesn't exist/);
+  assert.match(skill, /For brief version 3, read `shared\.md`, `judge\.md` and `appeal\.md` from `\$\{CLAUDE_SKILL_DIR\}\/briefs\/v3\/` instead/);
+  assert.match(skill, /- Then, for brief version 3, a space and `v3` \(version 2 runs have nothing here\)\./);
+  assert.match(skill, /a `<severity from="judge">` … `<\/severity>` block with every finding the judge ruled OVERSTATED or UNDERSTATED and every other finding it kept at LOW/);
+  assert.match(skill, /in brief version 3, `partlyReal` and `understated` are its PARTLY REAL and UNDERSTATED, and all five add up to it/);
+  assert.match(skill, /In version 3, also `severityReviewed` and `severityItems`, one item for every severity finding it checked, fair ones included/);
+  assert.match(skill, /show how often the appeal disagreed on each kind, so the LOW findings with no severity change, the part that costs most, can be judged on their own/);
+  assert.match(skill, /Read the project's `\.claude\/settings\.local\.json` and `\.claude\/settings\.json` \(if they exist\), use only their `modelSettings` and `effortLevel` keys/);
+  assert.match(skill, /`## Appeal: WRONGLY DISMISSED, TOO LOW, TOO HIGH or UNSURE` \(version 3\)/);
+  const check = sectionsOf(readLite('skills/council-dial-lite/check-brief.md'));
+  assert.equal(check['rule-judged-v3'], "every finding in the judge's final ranked list, and no others from the judge's report.");
+  assert.equal(check['rule-appeal-v3'], 'Also, in its own section, every finding in the appeal report marked WRONGLY DISMISSED, TOO LOW, TOO HIGH or UNSURE.');
+  const json = JSON.parse(skill.match(/\*\*run\.json\.\*\* Write it with this shape[^\n]*\n\n```json\n([\s\S]*?)\n```/)[1]);
+  assert.equal(json.briefVersion, 3);
+  assert.equal(json.runningCode, 'not allowed');
+  const readme = readLite('README.md');
+  assert.match(readme, /\*\*Brief version 3 by default\.\*\*/);
+  assert.match(readme, /\*\*Nothing runs unless you allow it\.\*\* Each agent is the plugin's read-only agent, `council-dial-lite:council-reader`/);
 });
 
 liteTest('the manifest names it the lighter edition, links the full one plainly, and matches its own marketplace', () => {

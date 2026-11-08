@@ -6,7 +6,10 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { runCommand, parseArgs, buildPlan, checkTarget, checkResults, readLog, runsFrom, compare, VERSION } from '../plugin/skills/council-dial/scripts/council.mjs';
+import { runCommand, parseArgs as parseArgsV3, buildPlan, checkTarget, checkResults, readLog, runsFrom, compare, VERSION } from '../plugin/skills/council-dial/scripts/council.mjs';
+// Written for brief version 2, which stays runnable: plan and estimate default to it in this file unless
+// a test names a version (brief version 3 is tested in round15).
+const parseArgs = argv => parseArgsV3(['plan', 'estimate'].includes(argv[0]) && !argv.includes('--brief-version') ? [...argv, '--brief-version', '2'] : argv);
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url));
 const made = [];
@@ -103,7 +106,7 @@ test('appeal: on by default for judged councils, counted in the agents, off with
   const a = run(p, ['plan', '--reviewers', 'specialised', '--combine', 'judged'], T);
   const row = JSON.parse(fs.readFileSync(jsonl(p), 'utf8').trim());
   assert.equal(row.type.appeal, true);
-  assert.equal(row.version, VERSION);
+  assert.equal(row.version, 2);
   assert.equal(a.agentCount, 5);
 });
 

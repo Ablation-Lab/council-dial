@@ -6,7 +6,10 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { runCommand, parseArgs, buildPlan, readLog, runsFrom, compare, councilType, agentsComplete } from '../plugin/skills/council-dial/scripts/council.mjs';
+import { runCommand, parseArgs as parseArgsV3, buildPlan, readLog, runsFrom, compare, councilType, agentsComplete } from '../plugin/skills/council-dial/scripts/council.mjs';
+// Written for brief version 2, which stays runnable: plan and estimate default to it in this file unless
+// a test names a version (brief version 3 is tested in round15).
+const parseArgs = argv => parseArgsV3(['plan', 'estimate'].includes(argv[0]) && !argv.includes('--brief-version') ? [...argv, '--brief-version', '2'] : argv);
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url));
 const made = [];
@@ -89,7 +92,7 @@ test('N4: every value in the rerun command is single-quoted, so a [1m] model id 
   const p = tmp();
   const a = run(p, ['plan', '--reviewers', 'specialised', '--combine', 'judged', '--roles', 'performance, accessibility', '--debate', '--model', 'sonnet', '--main-model', 'claude-opus-5-5[1m]'], T);
   const s = run(p, ['setup', '--run', a.runId]);
-  assert.equal(s.rerun, `node "<skill folder>/scripts/council.mjs" plan --reviewers 'specialised' --combine 'judged' --roles 'performance, accessibility' --debate --model 'sonnet' --main-model 'claude-opus-5-5[1m]' --project '<project root>'`);
+  assert.equal(s.rerun, `node "<skill folder>/scripts/council.mjs" plan --reviewers 'specialised' --combine 'judged' --roles 'performance, accessibility' --debate --model 'sonnet' --main-model 'claude-opus-5-5[1m]' --brief-version '2' --project '<project root>'`);
   const b = run(p, ['plan', '--reviewers', 'generalist', '--combine', 'pooled', '--n', '2', '--main-model', 'claude-opus-5-5'], T);
   const withValue = [...run(p, ['setup', '--run', b.runId]).rerun.matchAll(/--(reviewers|combine|roles|n|model|main-model|project) (\S)/g)];
   assert.ok(withValue.length >= 4 && withValue.every(m => m[2] === "'"), 'each option that takes a value is followed by a quote');

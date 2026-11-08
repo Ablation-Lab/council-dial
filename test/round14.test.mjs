@@ -8,13 +8,18 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { runCommand, parseArgs, councilType, seatsOf, seatIds, labelOf, readLog } from '../plugin/skills/council-dial/scripts/council.mjs';
+import { runCommand, parseArgs as parseArgsV3, councilType, seatsOf, seatIds, labelOf, readLog } from '../plugin/skills/council-dial/scripts/council.mjs';
+// Written for brief version 2, which stays runnable: plan and estimate default to it in this file unless
+// a test names a version (brief version 3 is tested in round15).
+const parseArgs = argv => parseArgsV3(['plan', 'estimate'].includes(argv[0]) && !argv.includes('--brief-version') ? [...argv, '--brief-version', '2'] : argv);
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url));
 const made = [];
 const tmp = () => { const d = fs.mkdtempSync(path.join(os.tmpdir(), 'council-dial-r14-')); made.push(d); return d; };
 after(() => { for (const d of made) fs.rmSync(d, { recursive: true, force: true }); });
-const run = (p, argv, input = '', env = {}) => runCommand({ ...parseArgs(argv), project: p }, input, new Date(), env);
+// No managed settings: the settings check reads an empty folder, so these tests don't depend on the machine.
+const NO_MANAGED = fs.mkdtempSync(path.join(os.tmpdir(), 'council-dial-r14-managed-'));
+const run = (p, argv, input = '', env = {}) => runCommand({ ...parseArgs(argv), project: p, managedSettingsDir: NO_MANAGED }, input, new Date(), env);
 const read = f => fs.readFileSync(path.join(ROOT, f), 'utf8');
 const T = 'the diff of branch fix-parser: src/parser.mjs and its tests';
 const STD = ['--reviewers', 'specialised', '--combine', 'judged', '--main-model', 'claude-opus-5-5'];
@@ -81,13 +86,13 @@ test('every agent in the plan carries its seat\'s model and effort, a debate tur
 test('the plan shows every seat, explicit or default, and warns when CLAUDE_CODE_EFFORT_LEVEL overrides the seats\' effort', () => {
   const pl = plan(['--model', 'sonnet', '--seat-model', 'judge=haiku', '--seat-effort', 'appeal=max'], { CLAUDE_EFFORT: 'high' });
   assert.deepEqual(pl.seatSummary, [
-    "reviewer: correctness: model sonnet (explicit, --model (every seat)); effort: default, that model's default if it isn't the session's model, otherwise the session's level (high)",
-    "reviewer: security and privacy: model sonnet (explicit, --model (every seat)); effort: default, that model's default if it isn't the session's model, otherwise the session's level (high)",
-    "reviewer: docs and policy accuracy: model sonnet (explicit, --model (every seat)); effort: default, that model's default if it isn't the session's model, otherwise the session's level (high)",
-    "judge: model haiku (explicit, --seat-model (this seat)); effort: default, that model's default if it isn't the session's model, otherwise the session's level (high)",
+    "reviewer: correctness: model sonnet (explicit, --model (every seat)); effort: default, medium (claude-sonnet-5-5's default; user settings not checked, and a level saved there may apply)",
+    "reviewer: security and privacy: model sonnet (explicit, --model (every seat)); effort: default, medium (claude-sonnet-5-5's default; user settings not checked, and a level saved there may apply)",
+    "reviewer: docs and policy accuracy: model sonnet (explicit, --model (every seat)); effort: default, medium (claude-sonnet-5-5's default; user settings not checked, and a level saved there may apply)",
+    "judge: model haiku (explicit, --seat-model (this seat)); effort: default, medium (claude-haiku-5-5's default; user settings not checked, and a level saved there may apply)",
     'appeal: model sonnet (explicit, --model (every seat)); effort max (explicit, --seat-effort (this seat))',
   ]);
-  assert.equal(plan([], { CLAUDE_EFFORT: 'high' }).seatSummary[0], "reviewer: correctness: model: default, the session's, claude-opus-5-5; effort: default, the session's level (high)");
+  assert.equal(plan([], { CLAUDE_EFFORT: 'high' }).seatSummary[0], "reviewer: correctness: model: default, the session's, claude-opus-5-5; effort: default, high (the session's level)");
   const over = plan(['--seat-effort', 'appeal=max; judge=low'], { CLAUDE_CODE_EFFORT_LEVEL: 'medium' });
   assert.ok(over.warnings.includes("because CLAUDE_CODE_EFFORT_LEVEL is set, the effort asked for these seats won't apply: judge (low), appeal (max)"));
   assert.ok(over.warnings.some(w => w.startsWith('CLAUDE_CODE_EFFORT_LEVEL is set to medium')));
@@ -182,7 +187,7 @@ test('the judge and the appeal are kept blind: no brief or step instruction name
   assert.match(s, /Models and effort go only in those parameters: never put them in a prompt, and never tell any agent, the judge and the appeal above all, which model or effort any agent runs on\. Only the log records them\./);
   assert.match(s, /and that the review log folder, `reviews\/` or the one you passed with `--log-dir`, isn't part of the material/);
   assert.match(s, /Pass each agent's `model` from its entry in `steps` as the Agent tool's `model`, and its `effort` as the Agent tool's `effort`, leaving out either one when it's `null`\./);
-  assert.match(s, /Before you start any agent, show the user `seatSummary`, one line per seat with its model and effort, each marked explicit \(and which option set it\) or default\./);
+  assert.match(s, /Before you start any agent, show the user `seatSummary`, one line per seat with its model and effort, each marked explicit \(and which option set it\) or default;/);
   assert.doesNotMatch(s, /If `agentModel` is set, pass it as the Agent tool's `model` on every call/);
 });
 

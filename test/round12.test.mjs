@@ -9,7 +9,10 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { runCommand, parseArgs, effortOverrideOf, EFFORT_OVERRIDE_VALUES, ENV_NAMES } from '../plugin/skills/council-dial/scripts/council.mjs';
+import { runCommand, parseArgs as parseArgsV3, effortOverrideOf, EFFORT_OVERRIDE_VALUES, ENV_NAMES } from '../plugin/skills/council-dial/scripts/council.mjs';
+// Written for brief version 2, which stays runnable: plan and estimate default to it in this file unless
+// a test names a version (brief version 3 is tested in round15).
+const parseArgs = argv => parseArgsV3(['plan', 'estimate'].includes(argv[0]) && !argv.includes('--brief-version') ? [...argv, '--brief-version', '2'] : argv);
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url));
 const SCRIPT = path.join(ROOT, 'plugin/skills/council-dial/scripts/council.mjs');
@@ -121,7 +124,7 @@ test('both READMEs say it overrides per-seat effort, how to check and clear it, 
     assert.match(sec, /In PowerShell, run `Remove-Item Env:CLAUDE_CODE_EFFORT_LEVEL`, then `claude`; in bash, run `unset CLAUDE_CODE_EFFORT_LEVEL`, then `claude`\./, f);
     assert.match(sec, /If a settings file sets it, remove it from the file and start Claude Code again/, f);
     assert.match(sec, /`\/tasks` names each subagent's model, and adds the effort level set for that subagent, if one was/, f);
-    assert.match(s, /four environment variables, each by name: .*`CLAUDE_CODE_EFFORT_LEVEL`, which overrides every other effort setting/, f);
+    assert.match(s, /five environment variables, each by name: .*`CLAUDE_CODE_EFFORT_LEVEL`, which overrides every other effort setting/, f);
     assert.match(s, /always took effect, with `CLAUDE_CODE_EFFORT_LEVEL` not set/, f);
     assert.match(s, /the session's effort level, and the value of `CLAUDE_CODE_EFFORT_LEVEL` if it was set;/, f);
   }

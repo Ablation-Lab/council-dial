@@ -7,7 +7,10 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { runCommand, parseArgs, buildPlan, readEnv, ENV_NAMES, COUNT_RULE, BRIEF_SHA256, briefDigest } from '../plugin/skills/council-dial/scripts/council.mjs';
+import { runCommand, parseArgs as parseArgsV3, buildPlan, readEnv, ENV_NAMES, COUNT_RULE, BRIEF_SHA256, briefDigest } from '../plugin/skills/council-dial/scripts/council.mjs';
+// Written for brief version 2, which stays runnable: plan and estimate default to it in this file unless
+// a test names a version (brief version 3 is tested in round15).
+const parseArgs = argv => parseArgsV3(['plan', 'estimate'].includes(argv[0]) && !argv.includes('--brief-version') ? [...argv, '--brief-version', '2'] : argv);
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url));
 const SKILL = path.join(ROOT, 'plugin/skills/council-dial');
@@ -23,7 +26,7 @@ const run = (p, argv, input = '', env = {}) => runCommand({ ...parseArgs(argv), 
 const GOLDEN = JSON.parse(fs.readFileSync(path.join(ROOT, 'test/fixtures/briefs-1.3.6.json'), 'utf8'));
 const briefsOf = plan => plan.steps.flatMap(s => s.agents.map(a => [s.step, a.label, a.brief]));
 const T = 'the diff of branch fix-parser';
-const STD = ['plan', '--reviewers', 'specialised', '--combine', 'judged', '--debate', '--sequential', '--baseline'];
+const STD = ['plan', '--reviewers', 'specialised', '--combine', 'judged', '--debate', '--sequential', '--baseline', '--brief-version', '2'];
 
 test('every brief is byte for byte what 1.3.6 wrote, for every council shape', () => {
   assert.ok(GOLDEN.cases.length >= 418 && GOLDEN.texts.length >= 380);
@@ -43,9 +46,9 @@ test('every brief is byte for byte what 1.3.6 wrote, for every council shape', (
 
 test('the script run from the command line writes the same briefs, and a target is never read as a template', () => {
   const p = tmp();
-  const c = GOLDEN.cases.find(x => x.argv.join(' ') === STD.join(' ') && x.target.includes('{{rules}}'));
+  const c = GOLDEN.cases.find(x => x.argv.join(' ') === STD.slice(0, -2).join(' ') && x.target.includes('{{rules}}'));
   assert.ok(c);
-  const r = spawnSync(process.execPath, [SCRIPT, ...c.argv, '--project', p], { input: c.target, encoding: 'utf8', env: { ...process.env, CLAUDE_CODE_SUBAGENT_MODEL: '', CLAUDE_EFFORT: '' } });
+  const r = spawnSync(process.execPath, [SCRIPT, ...c.argv, '--brief-version', '2', '--project', p], { input: c.target, encoding: 'utf8', env: { ...process.env, CLAUDE_CODE_SUBAGENT_MODEL: '', CLAUDE_EFFORT: '' } });
   const plan = JSON.parse(r.stdout);
   assert.equal(plan.error, undefined);
   assert.deepEqual(briefsOf(plan).map(b => b[2]), c.briefs.map(b => GOLDEN.texts[b[2]]));
@@ -54,8 +57,10 @@ test('the script run from the command line writes the same briefs, and a target 
 
 test('the templates are plain UTF-8 Markdown, and briefs are the same from a checkout with CRLF line ends and a BOM', () => {
   const dir = path.join(SKILL, 'briefs');
-  const files = fs.readdirSync(dir).sort();
+  const files = fs.readdirSync(dir).filter(n => n !== 'v3').sort();
   assert.deepEqual(files, ['appeal.md', 'baseline.md', 'debate.md', 'judge.md', 'reviewer.md', 'shared.md']);
+  // Brief version 3's three templates, checked the same way in round15.
+  assert.deepEqual(fs.readdirSync(path.join(dir, 'v3')).sort(), ['appeal.md', 'judge.md', 'shared.md']);
   for (const f of files) {
     const b = fs.readFileSync(path.join(dir, f));
     assert.ok(!b.includes(0) && b[0] !== 0xef && !b.subarray(0, 2).equals(Buffer.from('#!')) && !b.includes(13), f);
@@ -122,7 +127,7 @@ test('a missing or damaged template stops plan with a clear error; the other com
 test('BRIEF_SHA256 is the digest of the template texts that ship', () => {
   assert.match(BRIEF_SHA256, /^[0-9a-f]{64}$/);
   const texts = {};
-  for (const f of fs.readdirSync(path.join(SKILL, 'briefs'))) {
+  for (const f of fs.readdirSync(path.join(SKILL, 'briefs')).filter(n => n.endsWith('.md'))) {
     const s = fs.readFileSync(path.join(SKILL, 'briefs', f), 'utf8');
     texts[f.replace(/\.md$/, '')] = Object.fromEntries([...s.matchAll(/^## (.+)\n(?:[^\n]*\n)*?```text\n([\s\S]*?)\n```$/gm)].map(m => [m[1], m[2]]));
   }
@@ -151,8 +156,8 @@ test('log\'s severity message gives the same rule as the judge\'s brief', () => 
   assert.throws(() => run(p, ['log', '--run', a.runId], JSON.stringify({ findingsCombined: 2, severity: { high: 1 } })), e => e.message.endsWith(COUNT_RULE));
 });
 
-test('the script reads only CLAUDE_CODE_SUBAGENT_MODEL, CLAUDE_CODE_SUBAGENT_MODEL_FORCE, CLAUDE_EFFORT and CLAUDE_CODE_EFFORT_LEVEL, each by name', () => {
-  assert.deepEqual(ENV_NAMES, ['CLAUDE_CODE_SUBAGENT_MODEL', 'CLAUDE_CODE_SUBAGENT_MODEL_FORCE', 'CLAUDE_EFFORT', 'CLAUDE_CODE_EFFORT_LEVEL']);
+test('the script reads only CLAUDE_CODE_SUBAGENT_MODEL, CLAUDE_CODE_SUBAGENT_MODEL_FORCE, CLAUDE_EFFORT, CLAUDE_CODE_EFFORT_LEVEL and CLAUDE_CONFIG_DIR, each by name', () => {
+  assert.deepEqual(ENV_NAMES, ['CLAUDE_CODE_SUBAGENT_MODEL', 'CLAUDE_CODE_SUBAGENT_MODEL_FORCE', 'CLAUDE_EFFORT', 'CLAUDE_CODE_EFFORT_LEVEL', 'CLAUDE_CONFIG_DIR']);
   assert.deepEqual(Object.keys(readEnv()), ENV_NAMES);
   // In the source, process.env appears only as process.env.<one of the three names>.
   const src = fs.readFileSync(SCRIPT, 'utf8');
@@ -178,7 +183,7 @@ test('the docs say where the briefs are and which environment variables the scri
     const s = fs.readFileSync(path.join(ROOT, f), 'utf8');
     assert.match(s, /\*\*The briefs are fixed templates\.\*\* Their wording is in Markdown files in the skill's `briefs\/` folder/);
     assert.match(s, /only its own brief templates \(the Markdown files in the skill's `briefs\/` folder, when it plans a run\) and the review log folder/);
-    assert.match(s, /four environment variables, each by name/);
+    assert.match(s, /five environment variables, each by name/);
     assert.match(s, /it won't plan a run if their texts differ from the ones that version of Council Dial shipped with/);
     assert.doesNotMatch(s, /briefs live in the script/);
   }

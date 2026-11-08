@@ -6,7 +6,10 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { runCommand, parseArgs, NOTES_MAX, PLUGIN_VERSION } from '../plugin/skills/council-dial/scripts/council.mjs';
+import { runCommand, parseArgs as parseArgsV3, NOTES_MAX, PLUGIN_VERSION } from '../plugin/skills/council-dial/scripts/council.mjs';
+// Written for brief version 2, which stays runnable: plan and estimate default to it in this file unless
+// a test names a version (brief version 3 is tested in round15).
+const parseArgs = argv => parseArgsV3(['plan', 'estimate'].includes(argv[0]) && !argv.includes('--brief-version') ? [...argv, '--brief-version', '2'] : argv);
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url));
 const made = [];
@@ -62,8 +65,8 @@ test('docs: both READMEs open with a plain-English section and a quick start, an
   assert.match(skill, /`update` cuts longer notes and returns a `warning`/);
 });
 
-test('the version is 1.4.0 everywhere', () => {
-  assert.equal(PLUGIN_VERSION, '1.4.0');
-  assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, 'plugin/.claude-plugin/plugin.json'), 'utf8')).version, '1.4.0');
-  assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, '.claude-plugin/marketplace.json'), 'utf8')).plugins[0].version, '1.4.0');
+test('the version is 1.5.0 everywhere', () => {
+  assert.equal(PLUGIN_VERSION, '1.5.0');
+  assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, 'plugin/.claude-plugin/plugin.json'), 'utf8')).version, '1.5.0');
+  assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, '.claude-plugin/marketplace.json'), 'utf8')).plugins[0].version, '1.5.0');
 });

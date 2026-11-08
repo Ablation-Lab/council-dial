@@ -6,7 +6,10 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { runCommand, parseArgs, agentLabels, PLUGIN_VERSION, VERSION } from '../plugin/skills/council-dial/scripts/council.mjs';
+import { runCommand, parseArgs as parseArgsV3, agentLabels, PLUGIN_VERSION, VERSION } from '../plugin/skills/council-dial/scripts/council.mjs';
+// Written for brief version 2, which stays runnable: plan and estimate default to it in this file unless
+// a test names a version (brief version 3 is tested in round15).
+const parseArgs = argv => parseArgsV3(['plan', 'estimate'].includes(argv[0]) && !argv.includes('--brief-version') ? [...argv, '--brief-version', '2'] : argv);
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url));
 const SCRIPT = path.join(ROOT, 'plugin/skills/council-dial/scripts/council.mjs');
@@ -85,9 +88,9 @@ test('setup gives a run\'s exact setup and the command to rerun it', () => {
   const a = run(p, ['plan', '--reviewers', 'specialised', '--combine', 'judged', '--roles', 'performance, accessibility', '--debate', '--model', 'sonnet', '--main-model', 'claude-opus-5-5'], T);
   const s = run(p, ['setup', '--run', a.runId]);
   assert.deepEqual(s.councilDial, { version: PLUGIN_VERSION, source: 'recorded' });
-  assert.equal(s.briefVersion, VERSION);
+  assert.equal(s.briefVersion, 2);
   assert.equal(s.target, T);
-  assert.equal(s.rerun, `node "<skill folder>/scripts/council.mjs" plan --reviewers 'specialised' --combine 'judged' --roles 'performance, accessibility' --debate --model 'sonnet' --main-model 'claude-opus-5-5' --project '<project root>'`);
+  assert.equal(s.rerun, `node "<skill folder>/scripts/council.mjs" plan --reviewers 'specialised' --combine 'judged' --roles 'performance, accessibility' --debate --model 'sonnet' --main-model 'claude-opus-5-5' --brief-version '2' --project '<project root>'`);
   assert.match(s.notes.join(' '), /keep this order/);
   const b = run(p, ['plan', '--reviewers', 'generalist', '--combine', 'judged', '--n', '2', '--no-appeal', '--baseline', '--main-model', 'claude-opus-5-5'], T);
   const sb = run(p, ['setup', '--run', b.runId]);
