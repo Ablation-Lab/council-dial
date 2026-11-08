@@ -20,8 +20,9 @@
 // templates (the skill's briefs/ folder, when plan writes the briefs) and the log folder (the log, and
 // the names of saved reports), checks the project and log paths exist and aren't links, and reads three
 // environment variables by name (see readEnv): CLAUDE_CODE_SUBAGENT_MODEL and
-// CLAUDE_CODE_SUBAGENT_MODEL_FORCE, which can change the model subagents run on, and CLAUDE_EFFORT, the
-// session's effort level, which plan records. It starts no programs and makes no network requests.
+// CLAUDE_CODE_SUBAGENT_MODEL_FORCE, which can change the model subagents run on, CLAUDE_EFFORT, the
+// session's effort level, and CLAUDE_CODE_EFFORT_LEVEL, which overrides every other effort setting; plan
+// records both effort variables. It starts no programs and makes no network requests.
 // Output is one line of JSON.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -33,7 +34,7 @@ import { fileURLToPath } from 'node:url';
 export const VERSION = 2;
 // Council Dial's own version, recorded with each plan so a run's setup can be rebuilt exactly. Keep it
 // equal to the plugin manifest's version (a test checks).
-export const PLUGIN_VERSION = '1.3.7';
+export const PLUGIN_VERSION = '1.3.8';
 const COMMANDS = ['plan', 'estimate', 'log', 'update', 'report', 'setup', 'list', 'compare'];
 // The description of what's reviewed is kept at this length when planned and when read back.
 export const TARGET_MAX = 600;
@@ -329,6 +330,24 @@ export function sessionEffortOf(env = {}) {
   return { effort: raw, warnings: [] };
 }
 
+// CLAUDE_CODE_EFFORT_LEVEL, when set, takes precedence over every other effort setting in Claude Code:
+// /effort, --effort, the effortLevel and modelSettings settings, a subagent definition's effort field and
+// the Agent tool's per-call effort parameter (an effort cap, maxEffortLevel, still applies). It can come from
+// the shell Claude Code was started from or from the env block of any settings file, which wins over the
+// shell, and Claude Code passes it to the script either way. auto and unset make Claude Code send no effort
+// level. plan warns when it's set and records it, so per-seat effort can't silently not apply.
+export const EFFORT_OVERRIDE_VALUES = [...EFFORT_LEVELS, 'auto', 'unset'];
+const OVERRIDE_HOW = "which overrides every other effort setting, including /effort, --effort, the effortLevel and modelSettings settings, any effort set for a seat in an agent definition, and the Agent tool's per-call effort parameter; it can come from your shell or from the env block of a settings file";
+export function effortOverrideOf(env = {}) {
+  const raw = env.CLAUDE_CODE_EFFORT_LEVEL == null ? '' : String(env.CLAUDE_CODE_EFFORT_LEVEL).trim().toLowerCase();
+  if (!raw) return { override: null, warnings: [] };
+  if (!EFFORT_OVERRIDE_VALUES.includes(raw)) return { override: null, warnings: [`CLAUDE_CODE_EFFORT_LEVEL is set, ${OVERRIDE_HOW}. Its value isn't one Council Dial can read (${EFFORT_OVERRIDE_VALUES.join(', ')}), so it isn't recorded, and the level the agents run at isn't known`] };
+  const effect = raw === 'auto' || raw === 'unset'
+    ? "Claude Code sends no effort level, so every agent in this run gets the API's default for its model"
+    : `every agent in this run runs at ${raw}, or lower if an effort cap applies or its model doesn't support ${raw}`;
+  return { override: raw, warnings: [`CLAUDE_CODE_EFFORT_LEVEL is set to ${raw}, ${OVERRIDE_HOW}: ${effect}. Per-seat effort settings won't apply; to use them, start Claude Code without it (the README says how)`] };
+}
+
 export function buildPlan(o, target, now = new Date(), usedIds = new Set(), env = {}) {
   const t = clean(target, TARGET_MAX);
   if (!t) throw new Error('say what to review on stdin (for example: "the diff of branch fix-parser in this repo: src/parser.mjs and its tests")');
@@ -353,9 +372,11 @@ export function buildPlan(o, target, now = new Date(), usedIds = new Set(), env 
   warnings.push(...modelWarnings);
   const { effort: sessionEffort, warnings: effortWarnings } = sessionEffortOf(env);
   warnings.push(...effortWarnings);
+  const { override: effortOverride, warnings: overrideWarnings } = effortOverrideOf(env);
+  warnings.push(...overrideWarnings);
   const agentCount = steps.reduce((s, x) => s + x.agents.length, 0);
   return {
-    runId, version: VERSION, label, target: t, sessionEffort,
+    runId, version: VERSION, label, target: t, sessionEffort, effortOverride,
     type: { reviewers: o.reviewers, n, roles, combine: o.combine, debate: o.debate, sequential: o.sequential, baseline: o.baseline, appeal, models },
     agentCount, agentModel: o.model ?? null, steps, warnings,
     resultsTemplate: {
@@ -508,7 +529,9 @@ export function readLog(file) {
         // can't rename a run or merge two types.
         rows.push({ kind: 'planned', runId: r.runId, time: r.time, version: Number.isInteger(r.version) ? r.version : 1, councilDial: typeof r.councilDial === 'string' && /^\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(r.councilDial) ? r.councilDial : null, label: labelOf(type), target: clean(r.target, TARGET_MAX), type,
           // Rows from 1.3.0 have sessionEffort (null when CLAUDE_EFFORT wasn't set); older rows don't.
-          effortRecorded: Object.hasOwn(r, 'sessionEffort'), sessionEffort: EFFORT_LEVELS.includes(r.sessionEffort) ? r.sessionEffort : null });
+          effortRecorded: Object.hasOwn(r, 'sessionEffort'), sessionEffort: EFFORT_LEVELS.includes(r.sessionEffort) ? r.sessionEffort : null,
+          // Rows from 1.3.8 have effortOverride (null when CLAUDE_CODE_EFFORT_LEVEL wasn't set); older rows don't.
+          overrideRecorded: Object.hasOwn(r, 'effortOverride'), effortOverride: EFFORT_OVERRIDE_VALUES.includes(r.effortOverride) ? r.effortOverride : null });
       } else if (r.kind === 'results') rows.push({ kind: 'results', runId: r.runId, time: r.time, results: checkResults(r.results, false) });
       else if (r.kind === 'update') rows.push({ kind: 'update', runId: r.runId, time: r.time, update: checkUpdate(r.update, false) });
       else throw new Error('bad kind');
@@ -521,7 +544,7 @@ export function readLog(file) {
 export function runsFrom(rows) {
   const runs = new Map();
   for (const r of rows) {
-    if (r.kind === 'planned') { if (!runs.has(r.runId)) runs.set(r.runId, { runId: r.runId, time: r.time, version: r.version, councilDial: r.councilDial, label: r.label, target: r.target, type: r.type, effortRecorded: r.effortRecorded, sessionEffort: r.sessionEffort, results: null, resultsLogged: 0, updates: [] }); continue; }
+    if (r.kind === 'planned') { if (!runs.has(r.runId)) runs.set(r.runId, { runId: r.runId, time: r.time, version: r.version, councilDial: r.councilDial, label: r.label, target: r.target, type: r.type, effortRecorded: r.effortRecorded, sessionEffort: r.sessionEffort, overrideRecorded: r.overrideRecorded, effortOverride: r.effortOverride, results: null, resultsLogged: 0, updates: [] }); continue; }
     const run = runs.get(r.runId);
     if (!run) continue;
     // Logging a run again replaces its results; resultsLogged counts how often, so the Markdown can say so.
@@ -775,10 +798,12 @@ export function setupOf(run) {
   if (!run.effortRecorded) notes.push('Its effort level wasn\'t recorded (it was planned before Council Dial 1.3.0).');
   else if (!run.sessionEffort) notes.push('CLAUDE_EFFORT wasn\'t set (or couldn\'t be read) when it was planned, so its effort level wasn\'t recorded.');
   else notes.push(`The session's effort level was ${run.sessionEffort} (from CLAUDE_EFFORT); run the rerun from a session at that level. This is the session's level, not one confirmed for each subagent${t.models?.requested ? `; it asked for --model ${t.models.requested}, and if that's a different model from the session's, the subagents may have run at that model's own level instead` : ''}.`);
+  if (run.effortOverride) notes.push(`CLAUDE_CODE_EFFORT_LEVEL was set to ${run.effortOverride} when it was planned, which overrode every other effort setting for every agent; set it the same way to rerun it.`);
+  else if (run.overrideRecorded) notes.push('CLAUDE_CODE_EFFORT_LEVEL wasn\'t set (or couldn\'t be read) when it was planned.');
   return {
     runId: run.runId, label: run.label, councilDial: { version, source }, briefVersion: run.version,
     type: { reviewers: t.reviewers, n: t.n, roles: t.roles, combine: t.combine, debate: t.debate, sequential: t.sequential, baseline: t.baseline, appeal: t.appeal },
-    models: t.models, effort: { session: run.sessionEffort, recorded: run.effortRecorded }, target: run.target,
+    models: t.models, effort: { session: run.sessionEffort, recorded: run.effortRecorded, override: run.effortOverride, overrideRecorded: run.overrideRecorded }, target: run.target,
     rerun: `node "<skill folder>/scripts/council.mjs" ${args.join(' ')} --project '<project root>'`, notes,
   };
 }
@@ -788,14 +813,16 @@ function parseJsonInput(input) {
 }
 
 // The only environment variables Council Dial reads, each by name: CLAUDE_CODE_SUBAGENT_MODEL and
-// CLAUDE_CODE_SUBAGENT_MODEL_FORCE, which can change the model subagents run on, and CLAUDE_EFFORT,
-// the session's effort level. Nothing else in the environment is read or passed on.
-export const ENV_NAMES = ['CLAUDE_CODE_SUBAGENT_MODEL', 'CLAUDE_CODE_SUBAGENT_MODEL_FORCE', 'CLAUDE_EFFORT'];
+// CLAUDE_CODE_SUBAGENT_MODEL_FORCE, which can change the model subagents run on, CLAUDE_EFFORT, the
+// session's effort level, and CLAUDE_CODE_EFFORT_LEVEL, which overrides every other effort setting.
+// Nothing else in the environment is read or passed on.
+export const ENV_NAMES = ['CLAUDE_CODE_SUBAGENT_MODEL', 'CLAUDE_CODE_SUBAGENT_MODEL_FORCE', 'CLAUDE_EFFORT', 'CLAUDE_CODE_EFFORT_LEVEL'];
 export function readEnv() {
   return {
     CLAUDE_CODE_SUBAGENT_MODEL: process.env.CLAUDE_CODE_SUBAGENT_MODEL,
     CLAUDE_CODE_SUBAGENT_MODEL_FORCE: process.env.CLAUDE_CODE_SUBAGENT_MODEL_FORCE,
     CLAUDE_EFFORT: process.env.CLAUDE_EFFORT,
+    CLAUDE_CODE_EFFORT_LEVEL: process.env.CLAUDE_CODE_EFFORT_LEVEL,
   };
 }
 const envNamed = e => Object.fromEntries(ENV_NAMES.map(k => [k, e?.[k]]));
@@ -810,7 +837,7 @@ export function runCommand(o, input, now = new Date(), givenEnv = readEnv()) {
   switch (o.cmd) {
     case 'plan': {
       const plan = buildPlan(o, input, now, new Set(runs.map(r => r.runId)), env);
-      const warning = append(p, { kind: 'planned', runId: plan.runId, version: VERSION, councilDial: PLUGIN_VERSION, time: now.toISOString(), label: plan.label, target: plan.target, type: plan.type, sessionEffort: plan.sessionEffort });
+      const warning = append(p, { kind: 'planned', runId: plan.runId, version: VERSION, councilDial: PLUGIN_VERSION, time: now.toISOString(), label: plan.label, target: plan.target, type: plan.type, sessionEffort: plan.sessionEffort, effortOverride: plan.effortOverride });
       return { ...plan, log: path.posix.join(p.rel, 'review-log.jsonl'), ...note, ...(warning ? { warning } : {}) };
     }
     case 'estimate': {

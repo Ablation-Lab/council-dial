@@ -1,5 +1,5 @@
 // Tests for 1.3.7: the briefs come from Markdown templates in the skill's briefs/ folder, word for
-// word as 1.3.6 wrote them, and the script reads only the three environment variables it uses.
+// word as 1.3.6 wrote them, and the script reads only the environment variables it uses, each by name.
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -151,8 +151,8 @@ test('log\'s severity message gives the same rule as the judge\'s brief', () => 
   assert.throws(() => run(p, ['log', '--run', a.runId], JSON.stringify({ findingsCombined: 2, severity: { high: 1 } })), e => e.message.endsWith(COUNT_RULE));
 });
 
-test('the script reads only CLAUDE_CODE_SUBAGENT_MODEL, CLAUDE_CODE_SUBAGENT_MODEL_FORCE and CLAUDE_EFFORT, each by name', () => {
-  assert.deepEqual(ENV_NAMES, ['CLAUDE_CODE_SUBAGENT_MODEL', 'CLAUDE_CODE_SUBAGENT_MODEL_FORCE', 'CLAUDE_EFFORT']);
+test('the script reads only CLAUDE_CODE_SUBAGENT_MODEL, CLAUDE_CODE_SUBAGENT_MODEL_FORCE, CLAUDE_EFFORT and CLAUDE_CODE_EFFORT_LEVEL, each by name', () => {
+  assert.deepEqual(ENV_NAMES, ['CLAUDE_CODE_SUBAGENT_MODEL', 'CLAUDE_CODE_SUBAGENT_MODEL_FORCE', 'CLAUDE_EFFORT', 'CLAUDE_CODE_EFFORT_LEVEL']);
   assert.deepEqual(Object.keys(readEnv()), ENV_NAMES);
   // In the source, process.env appears only as process.env.<one of the three names>.
   const src = fs.readFileSync(SCRIPT, 'utf8');
@@ -178,7 +178,7 @@ test('the docs say where the briefs are and which environment variables the scri
     const s = fs.readFileSync(path.join(ROOT, f), 'utf8');
     assert.match(s, /\*\*The briefs are fixed templates\.\*\* Their wording is in Markdown files in the skill's `briefs\/` folder/);
     assert.match(s, /only its own brief templates \(the Markdown files in the skill's `briefs\/` folder, when it plans a run\) and the review log folder/);
-    assert.match(s, /three environment variables, each by name/);
+    assert.match(s, /four environment variables, each by name/);
     assert.match(s, /it won't plan a run if their texts differ from the ones that version of Council Dial shipped with/);
     assert.doesNotMatch(s, /briefs live in the script/);
   }
