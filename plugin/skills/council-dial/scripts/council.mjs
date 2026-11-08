@@ -33,7 +33,7 @@ import { fileURLToPath } from 'node:url';
 export const VERSION = 2;
 // Council Dial's own version, recorded with each plan so a run's setup can be rebuilt exactly. Keep it
 // equal to plugin.json (a test checks).
-export const PLUGIN_VERSION = '1.3.2';
+export const PLUGIN_VERSION = '1.3.3';
 const COMMANDS = ['plan', 'estimate', 'log', 'update', 'report', 'setup', 'list', 'compare'];
 // The description of what's reviewed is kept at this length when planned and when read back.
 export const TARGET_MAX = 600;
@@ -500,7 +500,7 @@ const ratio = (a, b) => (b > 0 ? Math.round((a / b) * 100) : null);
 const one = v => Math.round(v * 10) / 10;
 // A run's total tokens, only when every agent the run had is listed with its tokens (null otherwise),
 // so a run with an agent left out, or with gaps, doesn't look cheaper than it was.
-const runTokens = (type, res) => (agentsComplete(type, res) && res.agents.every(x => x.tokens != null) ? res.agents.reduce((s, x) => s + x.tokens, 0) : null);
+const runUsageTotal = (type, res) => (agentsComplete(type, res) && res.agents.every(x => x.tokens != null) ? res.agents.reduce((s, x) => s + x.tokens, 0) : null);
 // Kept findings are the ones that survive judging, REAL or OVERSTATED: an OVERSTATED finding is a real
 // problem rated too high, so it counts as found. How often the judge cut a kept finding's severity
 // is reported separately, as the overstated share of kept findings.
@@ -508,7 +508,7 @@ const kept = res => res.confirmed + res.overstated;
 export function compare(runs) {
   const groups = new Map();
   for (const r of runs) {
-    const g = groups.get(r.label) || { label: r.label, planned: 0, runs: 0, verifiedRuns: 0, combined: 0, combinedVerified: 0, kept: 0, overstated: 0, dismissed: 0, wall: [0, 0], path: [0, 0], unlabelled: [0, 0], fixes: 0, failedFixes: 0, regressions: 0, rechecked: 0, baselineRuns: 0, baselineConfirmed: 0, councilKeptWithBaseline: 0, appealRuns: 0, appealReviewed: 0, appealFlagged: 0, appealReinstated: 0, appealPending: 0, tokenRuns: 0, tokens: 0, appealTokenRuns: 0, appealTokens: 0 };
+    const g = groups.get(r.label) || { label: r.label, planned: 0, runs: 0, verifiedRuns: 0, combined: 0, combinedVerified: 0, kept: 0, overstated: 0, dismissed: 0, wall: [0, 0], path: [0, 0], unlabelled: [0, 0], fixes: 0, failedFixes: 0, regressions: 0, rechecked: 0, baselineRuns: 0, baselineConfirmed: 0, councilKeptWithBaseline: 0, appealRuns: 0, appealReviewed: 0, appealFlagged: 0, appealReinstated: 0, appealPending: 0, usageRuns: 0, tokens: 0, appealUsageRuns: 0, appealUsage: 0 };
     g.planned++;
     groups.set(r.label, g);
     if (!r.results) continue;
@@ -529,11 +529,11 @@ export function compare(runs) {
     }
     // The appeal agent's tokens count only from a run whose total counts, so both figures come from
     // the same runs (a complete run lists every agent with its tokens).
-    const t = runTokens(r.type, res);
+    const t = runUsageTotal(r.type, res);
     if (t != null) {
-      g.tokenRuns++; g.tokens += t;
+      g.usageRuns++; g.tokens += t;
       const ap = res.agents.find(x => x.step === 'appeal');
-      if (ap) { g.appealTokenRuns++; g.appealTokens += ap.tokens; }
+      if (ap) { g.appealUsageRuns++; g.appealUsage += ap.tokens; }
     }
   }
   const avg = ([k, sum]) => (k ? { perRun: one(sum / k), runs: k } : null);
@@ -546,8 +546,8 @@ export function compare(runs) {
     fixesFailedRecheckPercent: ratio(g.failedFixes, g.fixes), regressionsPerRecheckedRun: g.rechecked ? one(g.regressions / g.rechecked) : null,
     baseline: g.baselineRuns ? { runs: g.baselineRuns, councilKeptPerRun: one(g.councilKeptWithBaseline / g.baselineRuns), baselineConfirmedPerRun: one(g.baselineConfirmed / g.baselineRuns) } : null,
     appeal: g.appealRuns ? { runs: g.appealRuns, dismissedChecked: g.appealReviewed, flagged: g.appealFlagged, reinstated: g.appealReinstated, pending: g.appealPending } : null,
-    tokensPerRun: g.tokenRuns ? Math.round(g.tokens / g.tokenRuns) : null, tokenRuns: g.tokenRuns,
-    appealTokensPerRun: g.appealTokenRuns ? Math.round(g.appealTokens / g.appealTokenRuns) : null,
+    tokensPerRun: g.usageRuns ? Math.round(g.tokens / g.usageRuns) : null, usageRuns: g.usageRuns,
+    appealUsagePerRun: g.appealUsageRuns ? Math.round(g.appealUsage / g.appealUsageRuns) : null,
     unverifiedRuns: g.runs - g.verifiedRuns, unfinishedRuns: g.planned - g.runs,
   })).sort((a, b) => b.runs - a.runs || a.label.localeCompare(b.label));
   return Object.assign(all.slice(0, MAX_GROUPS), { more: Math.max(0, all.length - MAX_GROUPS) });
@@ -558,7 +558,7 @@ export function compare(runs) {
 export function estimateOf(runs, type, label) {
   const same = runs.filter(r => r.label === label);
   const logged = same.filter(r => r.results);
-  const counted = logged.map(r => ({ r, tokens: runTokens(r.type, r.results) })).filter(x => x.tokens != null);
+  const counted = logged.map(r => ({ r, tokens: runUsageTotal(r.type, r.results) })).filter(x => x.tokens != null);
   const agentCount = plannedAgents(type);
   const quick = type.reviewers === 'generalist' && type.combine === 'pooled' && type.n <= 3 && !type.debate && !type.baseline;
   const trial = `a smaller trial run first: ${quick ? '' : 'a Quick council (3 generalist reviewers, pooled), or '}this council on one part of the material, logged like any other run`;
@@ -601,7 +601,7 @@ function markdown(runs) {
   const L = ['# Review log', '', 'Written by Council Dial from review-log.jsonl; edits here are replaced on the next run.', '', '## Runs', ''];
   if (!runs.length) L.push('No runs yet.', '');
   else {
-    L.push('| Run | Date | Type | Target | Findings | Kept (overstated) | Dismissed | Minutes | Tokens | Fixes failed recheck | Baseline confirmed | Appeal |', '|---|---|---|---|---|---|---|---|---|---|---|---|');
+    L.push('| Run | Date | Type | Target | Findings | Kept (overstated) | Dismissed | Minutes | Total tokens | Fixes failed recheck | Baseline confirmed | Appeal |', '|---|---|---|---|---|---|---|---|---|---|---|---|');
     for (const r of runs) {
       const res = r.results, fx = r.updates.reduce((a, u) => ({ made: a.made + u.fixesMade, failed: a.failed + u.fixesFailedRecheck }), { made: 0, failed: 0 });
       const ap = r.type.appeal && res?.appeal ? (res.appeal.ran ? `${res.appeal.items.length} of ${res.appeal.reviewed} flagged, ${res.appeal.items.filter(x => x.call === 'reinstated').length} reinstated` : 'nothing dismissed') : '-';
@@ -628,10 +628,10 @@ function markdown(runs) {
   else {
     const runsOf = k => `${k} ${k === 1 ? 'run' : 'runs'}`;
     const minCell = m => [m.wall && `wall ${m.wall.perRun} (${runsOf(m.wall.runs)})`, m.criticalPath && `critical path ${m.criticalPath.perRun} (${runsOf(m.criticalPath.runs)})`, m.unlabelled && `unlabelled ${m.unlabelled.perRun} (${runsOf(m.unlabelled.runs)})`].filter(Boolean).join(', ') || '-';
-    L.push('| Type | Runs | Findings per run | Kept | Dismissed | Kept but severity cut | Minutes per run | Tokens per run (appeal agent) | Fixes that failed recheck | Regressions per rechecked run | Council kept vs baseline confirmed (per run) | Appeal: dismissals flagged, reinstated | Unverified runs | Planned, not logged |', '|---|---|---|---|---|---|---|---|---|---|---|---|---|---|');
-    for (const g of c) L.push(`| ${cell(g.label)} | ${g.runs} | ${dash(g.findingsPerRun)} | ${pct(g.keptPercent)} | ${pct(g.dismissedPercent)} | ${pct(g.overstatedOfKeptPercent)} | ${minCell(g.minutes)} | ${g.tokensPerRun == null ? '-' : `${g.tokensPerRun}${g.appealTokensPerRun != null ? ` (${g.appealTokensPerRun})` : ''}`} | ${pct(g.fixesFailedRecheckPercent)} | ${dash(g.regressionsPerRecheckedRun)} | ${g.baseline ? `${g.baseline.councilKeptPerRun} vs ${g.baseline.baselineConfirmedPerRun} (${runsOf(g.baseline.runs)})` : '-'} | ${g.appeal ? `${g.appeal.flagged} of ${g.appeal.dismissedChecked}, ${g.appeal.reinstated} reinstated${g.appeal.pending ? `, ${g.appeal.pending} pending` : ''}` : '-'} | ${g.unverifiedRuns} | ${g.unfinishedRuns} |`);
+    L.push('| Type | Runs | Findings per run | Kept | Dismissed | Kept but severity cut | Minutes per run | Total tokens per run (appeal agent) | Fixes that failed recheck | Regressions per rechecked run | Council kept vs baseline confirmed (per run) | Appeal: dismissals flagged, reinstated | Unverified runs | Planned, not logged |', '|---|---|---|---|---|---|---|---|---|---|---|---|---|---|');
+    for (const g of c) L.push(`| ${cell(g.label)} | ${g.runs} | ${dash(g.findingsPerRun)} | ${pct(g.keptPercent)} | ${pct(g.dismissedPercent)} | ${pct(g.overstatedOfKeptPercent)} | ${minCell(g.minutes)} | ${g.tokensPerRun == null ? '-' : `${g.tokensPerRun}${g.appealUsagePerRun != null ? ` (${g.appealUsagePerRun})` : ''}`} | ${pct(g.fixesFailedRecheckPercent)} | ${dash(g.regressionsPerRecheckedRun)} | ${g.baseline ? `${g.baseline.councilKeptPerRun} vs ${g.baseline.baselineConfirmedPerRun} (${runsOf(g.baseline.runs)})` : '-'} | ${g.appeal ? `${g.appeal.flagged} of ${g.appeal.dismissedChecked}, ${g.appeal.reinstated} reinstated${g.appeal.pending ? `, ${g.appeal.pending} pending` : ''}` : '-'} | ${g.unverifiedRuns} | ${g.unfinishedRuns} |`);
     if (c.more) L.push('', `(${c.more} more types not shown.)`);
-    L.push('', 'Kept is the share of combined findings that survived checking, REAL or OVERSTATED (an OVERSTATED finding is a real problem rated too high); dismissed is the share marked NOT REAL. Kept but severity cut is the share of kept findings marked OVERSTATED, which shows how far the reviewers\' severities had to be corrected. All three count only verified runs. The baseline\'s findings are counted confirmed or not, with no OVERSTATED bucket, so a real baseline finding counts as confirmed even if its severity was too high; its confirmed count is the counterpart of the council\'s kept count.', '', 'Minutes are of two kinds and never averaged together: wall time, from the start to when the last agent finished, and the critical path, worked out from the agents\' reported times (the slowest reviewer, then each later step), which leaves out Claude\'s own time between steps. Minutes logged before Council Dial 1.3.0 are unlabelled, because they could be either; logging the run again labels them.', '', 'Tokens per run count only runs where every agent the run had is listed with the tokens Claude Code reported for it, and so does the appeal agent\'s figure in brackets. A type ending in @ and a model was run on that model (as asked for; Claude Code doesn\'t report the model a subagent actually ran on to the main session). Small numbers of runs say little; compare types on the same kind of target.', '', 'Where a run\'s reports were saved, they are in the folder named by its run id, next to this file. Finding numbers restart in every run, so cite them with the run id, such as 20261107-2f23/M12.', '');
+    L.push('', 'Kept is the share of combined findings that survived checking, REAL or OVERSTATED (an OVERSTATED finding is a real problem rated too high); dismissed is the share marked NOT REAL. Kept but severity cut is the share of kept findings marked OVERSTATED, which shows how far the reviewers\' severities had to be corrected. All three count only verified runs. The baseline\'s findings are counted confirmed or not, with no OVERSTATED bucket, so a real baseline finding counts as confirmed even if its severity was too high; its confirmed count is the counterpart of the council\'s kept count.', '', 'Minutes are of two kinds and never averaged together: wall time, from the start to when the last agent finished, and the critical path, worked out from the agents\' reported times (the slowest reviewer, then each later step), which leaves out Claude\'s own time between steps. Minutes logged before Council Dial 1.3.0 are unlabelled, because they could be either; logging the run again labels them.', '', 'Total tokens per run count only runs where every agent the run had is listed with the tokens Claude Code reported for it, and so does the appeal agent\'s figure in brackets. A type ending in @ and a model was run on that model (as asked for; Claude Code doesn\'t report the model a subagent actually ran on to the main session). Small numbers of runs say little; compare types on the same kind of target.', '', 'Where a run\'s reports were saved, they are in the folder named by its run id, next to this file. Finding numbers restart in every run, so cite them with the run id, such as 20261107-2f23/M12.', '');
   }
   return L.join('\n');
 }

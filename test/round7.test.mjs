@@ -29,14 +29,14 @@ test('N1: a run\'s tokens count only when every agent it had is listed with toke
   const a = run(p, [...STD], T);
   run(p, ['log', '--run', a.runId], JSON.stringify({ findingsCombined: 5, confirmed: 5, verified: true, agents: REVIEWERS, appeal: { ran: true, reviewed: 0, items: [] } }));
   let g = run(p, ['compare']).byType[0];
-  assert.deepEqual([g.tokensPerRun, g.tokenRuns], [null, 0], 'not averaged in');
+  assert.deepEqual([g.tokensPerRun, g.usageRuns], [null, 0], 'not averaged in');
   assert.equal(run(p, ['estimate', ...STD.slice(1)]).tokens, null, 'and no estimate from it');
   assert.match(md(p), new RegExp(`\\| ${a.runId} \\|.*\\| 120000 \\(3 of 5 agents\\) \\|`), 'the Markdown says how many of the run\'s agents have figures');
   // The appeal didn't run, so the three reviewers and the judge are the whole run.
   const b = run(p, [...STD], T);
   run(p, ['log', '--run', b.runId], JSON.stringify({ findingsCombined: 5, confirmed: 5, verified: true, agents: [...REVIEWERS, JUDGE], appeal: { ran: false } }));
   g = run(p, ['compare']).byType[0];
-  assert.deepEqual([g.tokensPerRun, g.tokenRuns], [180000, 1]);
+  assert.deepEqual([g.tokensPerRun, g.usageRuns], [180000, 1]);
   assert.equal(run(p, ['estimate', ...STD.slice(1)]).tokens.perRun, 180000);
   assert.match(md(p), new RegExp(`\\| ${b.runId} \\|.*\\| 180000 \\| `));
   const type = councilType(parseArgs(STD)).type;
@@ -136,7 +136,7 @@ test('R2: a row that lists more agents than the run had, or agents at the wrong 
     planned('20261107-0004'), results('20261107-0004', [rev(1), rev(2), rev(3), agent('judge', 'combine', 10, 1000)]),
   ]);
   const g = run(q, ['compare']).byType[0];
-  assert.deepEqual([g.tokensPerRun, g.tokenRuns], [40, 1], 'only the complete run is averaged in');
+  assert.deepEqual([g.tokensPerRun, g.usageRuns], [40, 1], 'only the complete run is averaged in');
   const m = md(q);
   assert.match(m, /\| 20261107-0001 \|.*\| 50 \(5 listed, run had 4\) \|/);
   assert.match(m, /\| 20261107-0002 \|.*\| 40 \(5 listed, run had 4, 4 with tokens\) \|/);
@@ -160,12 +160,12 @@ test('the appeal agent\'s tokens count only from runs whose total counts, as tok
   const b = run(p, [...STD], T);
   run(p, ['log', '--run', b.runId], JSON.stringify({ findingsCombined: 5, confirmed: 5, verified: true, agents: [...REVIEWERS, agent('appeal', 'appeal', 90000, 20000)], appeal: { ran: true, reviewed: 0, items: [] } }));
   let g = run(p, ['compare']).byType[0];
-  assert.deepEqual([g.tokensPerRun, g.tokenRuns, g.appealTokensPerRun], [210000, 1, 30000]);
+  assert.deepEqual([g.tokensPerRun, g.usageRuns, g.appealUsagePerRun], [210000, 1, 30000]);
   // Not complete either: the judge has no tokens.
   const c = run(p, [...STD], T);
   run(p, ['log', '--run', c.runId], JSON.stringify({ findingsCombined: 5, confirmed: 5, verified: true, agents: [...REVIEWERS, agent('judge', 'combine', null, 1000), agent('appeal', 'appeal', 90000, 20000)], appeal: { ran: true, reviewed: 0, items: [] } }));
   g = run(p, ['compare']).byType[0];
-  assert.deepEqual([g.tokensPerRun, g.tokenRuns, g.appealTokensPerRun], [210000, 1, 30000]);
+  assert.deepEqual([g.tokensPerRun, g.usageRuns, g.appealUsagePerRun], [210000, 1, 30000]);
   assert.match(md(p), /\| 210000 \(30000\) \|/);
 });
 

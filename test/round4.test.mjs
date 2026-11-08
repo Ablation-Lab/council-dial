@@ -74,7 +74,7 @@ test('each agent\'s model, tokens, tool uses and time are logged; tokens per run
   const g = run(p, ['compare']).byType[0];
   assert.equal(g.label, 'specialised-3/judged+appeal @claude-opus-5-5');
   assert.equal(g.tokensPerRun, 220000);
-  assert.equal(g.appealTokensPerRun, 30000);
+  assert.equal(g.appealUsagePerRun, 30000);
   const md = fs.readFileSync(path.join(p, 'reviews', 'review-log.md'), 'utf8');
   assert.match(md, new RegExp(`\\| ${a.runId} \\|.*\\| wall 5, critical path 2\\.8 \\| 220000 \\|`));
   assert.match(md, /\| wall 5 \(1 run\), critical path 2\.8 \(1 run\) \| 220000 \(30000\) \|/);
