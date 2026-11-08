@@ -25,7 +25,13 @@ const T = 'shelfkeep.py, scripts/tidy.sh and README.md';
 const STD = ['--reviewers', 'specialised', '--combine', 'judged', '--main-model', 'claude-opus-5-5'];
 const plan = (extra = [], env = {}, p = tmp(), o = {}) => run(p, ['plan', ...STD, ...extra], T, env, o);
 const write = (dir, rel, obj) => { const f = path.join(dir, rel); fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, typeof obj === 'string' ? obj : JSON.stringify(obj)); return f; };
-const sectionsOf = text => Object.fromEntries([...text.replace(/\r\n?/g, '\n').matchAll(/^## (.+)\n(?:[^\n]*\n)*?```text\n([\s\S]*?)\n```$/gm)].map(m => [m[1], m[2]]));
+// Like the script: split on '## ' headings, and take the text block under each, so a heading in the notes with
+// no text block of its own (such as 'Version 2 vs version 3') isn't mistaken for one.
+const sectionsOf = text => Object.fromEntries(text.replace(/\r\n?/g, '\n').split(/^## /m).slice(1).map(part => {
+  const nl = part.indexOf('\n');
+  const m = nl < 0 ? null : part.slice(nl + 1).match(/^```text\n([\s\S]*?)\n```$/m);
+  return m ? [part.slice(0, nl).trim(), m[1]] : null;
+}).filter(Boolean));
 const lastResults = p => JSON.parse(fs.readFileSync(path.join(p, 'reviews/review-log.jsonl'), 'utf8').trim().split('\n').pop()).results;
 
 // ---- Brief version 3, and version 2 kept.
@@ -299,4 +305,39 @@ test('both READMEs explain the tool limits and why they are the default, brief v
     assert.doesNotMatch(r, /An appeal on severity downgrades\./, f);
   }
   assert.match(read('README.md'), /\| `plugin\/agents\/` \| `council-reader\.md`, the read-only agent/);
+});
+
+// ---- 1.5.1: a standalone "Version 2 vs version 3" section, in both READMEs and the template notes.
+test('both READMEs describe every difference between version 2 and version 3, and why runs are compared apart', () => {
+  for (const f of ['README.md', 'plugin/README.md']) {
+    const r = read(f);
+    const sec = r.slice(r.indexOf('## Version 2 vs version 3'), r.indexOf('## Example prompts'));
+    assert.ok(sec.length > 2000, f);
+    for (const x of [
+      'REAL (the claim holds, same severity), PARTLY REAL (part of the claim doesn\'t hold, same severity), OVERSTATED (lower), UNDERSTATED (higher, so a severity can be raised) and NOT REAL',
+      'one finding, silent data loss, ended LOW, MED or HIGH depending only on whether one reviewer happened to rate it high',
+      'From the evidence, "not from how many reviewers raised it or how they rated it"',
+      '| Numbering | Left to the judge (one used M1, M2; another used letters). | M1, M2 and so on',
+      'the log also counts `partlyReal` and `understated`',
+      'Also checks every severity the judge changed (up or down) and every other finding it kept at LOW: SEVERITY FAIR, TOO LOW, TOO HIGH or UNSURE',
+      'how often it disagrees on unchanged LOW findings is reported separately',
+      '"Run nothing unless the user allowed running code": no code from the material, no scripts or one-off checks of its own (even in a scratch folder), no tests and no shell commands',
+      'By a tool limit: every agent is the plugin\'s read-only agent, `council-dial:council-reader`, with only the Read, Grep and Glob tools',
+      'The read-only agent\'s own definition is its system prompt, in place of the general-purpose one',
+      'The same with ` v3` before the models, such as `specialised-3/judged+appeal v3 @sonnet`',
+      '**Both versions, from 1.5.0:** the effort settings check isn\'t a brief difference.',
+      '**Why runs of the two versions must be compared separately:**',
+      'To compare with a run from before 1.5.0, plan with `--brief-version 2`',
+    ]) assert.ok(sec.includes(x), `${f}: ${x}`);
+  }
+});
+
+test('the version 3 template notes describe every difference, and only the notes changed: the digest is the same', () => {
+  const notes = fs.readFileSync(path.join(SKILL, 'briefs/v3/shared.md'), 'utf8');
+  assert.match(notes, /^## Version 2 vs version 3$/m);
+  for (const x of ['**The judge\'s rulings.**', '**Numbering and counts.**', '**The appeal.**', '**Running code.**', '**Enforcement and the system prompt.**', '**The type\'s name**', '**Not a brief difference:**']) assert.ok(notes.includes(x), x);
+  // The notes heading has no text block, so it's no template, and version 3's texts and digest are what 1.5.0 shipped.
+  assert.ok(!('Version 2 vs version 3' in sectionsOf(notes)));
+  assert.equal(BRIEF_SHA256_V3, '2f545f09d9477094e4ead755b5a7a92781a811ff2ef1497f9a20251577b5fec0');
+  assert.equal(plan().version, 3);
 });

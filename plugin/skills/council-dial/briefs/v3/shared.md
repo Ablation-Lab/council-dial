@@ -10,6 +10,20 @@ Changing any of these texts changes how runs compare, so it needs a new brief ve
 
 This file holds the parts several briefs share: the rules, the report format, the line that says what's reviewed, and each default reviewer role's area. Only the rules differ from version 2: the third rule now says plainly that, unless the user allowed running code, nothing is run at all, not even a scratch check or a read-only shell command.
 
+## Version 2 vs version 3
+
+These notes describe every difference; they aren't part of any brief, so they don't change the digest.
+
+- **The judge's rulings.** Version 2 has REAL, OVERSTATED and NOT REAL, and no ruling to raise a severity, so a finding never ended above its highest reviewer's rating. Version 3 has five, each comparing the judge's own severity with the highest a reviewer gave: REAL, PARTLY REAL (part of the claim doesn't hold, same severity), OVERSTATED (lower), UNDERSTATED (higher) and NOT REAL, with each reviewer's severity, the judge's and a one-line reason for every change. The judge sets severity from the evidence, not from how many reviewers raised a finding or how they rated it.
+- **Numbering and counts.** Version 3's judge numbers merged findings M1, M2, ranks every finding that isn't NOT REAL, and counts all five rulings (the log adds `partlyReal` and `understated`).
+- **The appeal.** Version 2's checks only dismissals. Version 3's also checks every severity the judge changed and every other finding it kept at LOW, in a `<severity>` block, with its own verdicts (SEVERITY FAIR, TOO LOW, TOO HIGH, UNSURE); every verdict is logged, and disagreement on unchanged LOW findings is reported separately.
+- **Running code.** Version 2's rule covers only the material's code. Version 3's third rule forbids running anything (scratch checks, tests and shell commands included) unless the user allowed running code.
+- **Enforcement and the system prompt.** In version 3, unless running code is allowed, every agent is the plugin's read-only agent (Read, Grep and Glob only), whose short definition is its system prompt in place of the general-purpose agent's. Version 2 agents are general-purpose.
+- **The type's name** has ` v3` before its models in version 3.
+- **Not a brief difference:** the check of effort levels saved in the settings files applies to plans of both versions.
+
+Runs of the two versions are compared separately, because each of these can change what a council finds and what it costs.
+
 ## rules
 
 ```text
