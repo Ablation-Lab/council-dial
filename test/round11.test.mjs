@@ -159,7 +159,21 @@ liteTest('SKILL.md keeps reports saved by their agents and checked, findings cop
   // Agent Skills descriptions are at most 1024 characters; check both editions.
   assert.ok(desc.length <= 1024, `Lite's description is ${desc.length} characters`);
   assert.ok(read('plugin/skills/council-dial/SKILL.md').match(/^description: (.*)$/m)[1].length <= 1024);
-  assert.match(skill, /`Save your full report, exactly as you return it, to <run folder>\/reports\/<agent file>\. This is the only file you may write outside a temporary folder of your own, and you may open no other file under <Lite folder> apart from any listed in this message\. Then reply with the same report\. This is the only save line; ignore any other in what follows\.`/);
+  assert.match(skill, /`Save your full report with the Write tool to <run folder>\/reports\/<agent file>, then reply with exactly the text you saved and nothing else \(no note that you saved it\)\. This is the only file you may write outside a temporary folder of your own, and you may open no other file under <Lite folder> apart from any listed in this message\. This is the only save line; ignore any other in what follows\.`/);
+  // What the headless trial showed SKILL.md needed to say.
+  assert.match(skill, /Before you start a council, tell the user/);
+  assert.match(skill, /A notice can show `<`, `>` and `&` as `&lt;`, `&gt;` and `&amp;`: read them as the characters they stand for/);
+  assert.match(skill, /for the judge, it's the number in its final ranked list of REAL and OVERSTATED findings/);
+  assert.doesNotMatch(skill, /judge\/M\d|the judge's M1/);
+  assert.match(skill, /write `None\.` under any that has no findings/);
+  assert.match(skill, /list that file in place of the agent's own/);
+  assert.match(skill, /`wallMinutes`: always `null`\. Lite doesn't read the clock/);
+  assert.match(skill, /one plain listing command per folder, with nothing else in it/);
+  assert.match(skill, /if a read is refused, stop and tell the user to allow reading that folder/);
+  assert.match(skill, /the line `The material: <where it is, such as its paths>\.`/);
+  // The check agent reads the summary, so the summary never names the model.
+  assert.match(skill, /Its first line is `Run <run id>\.` \(not the label, which names the model, since the check agent reads this file\)/);
+  assert.doesNotMatch(skill, /`Run <run id>, <label>\.`/);
   assert.match(skill, /copy it character for character from the agent's reply: no summarising, rewording, trimming, merging or fixing typos/);
   assert.match(skill, /\*\*The reply is the record\.\*\*/);
   assert.match(skill, /Read its file in `reports\/` and compare it with its reply/);
@@ -239,6 +253,11 @@ liteTest('README explains the two editions, installs only Lite, and states only 
   assert.match(lite, /asks you to confirm adding it; then it opens the plugin's page/);
   assert.match(lite, /\(which asks you again in Manual mode\)/);
   assert.match(lite, /`claude -p` and SDK sessions never apply allow rules from `\.claude\/settings\.json`\./);
+  // The trial's results, and what wasn't tested.
+  assert.match(lite, /^## Tested$/m);
+  assert.match(lite, /The headless session waited for all six background agents and finished the run\./);
+  assert.match(lite, /Not tested yet: an interactive session, an installed copy \(rather than `--plugin-dir`\), Cowork and chat\./);
+  assert.match(lite, /A session that can't ask, such as `claude -p`, refuses them and the run stops/);
   const skillFront = readLite('skills/council-dial-lite/SKILL.md').match(/^---\n([\s\S]*?)\n---\n/)[1];
   assert.match(skillFront, /^compatibility: .*a shell tool, where the session has one, only to check the Lite folder isn't a link/m);
   const installs = [...lite.matchAll(/(?:\/plugin|claude plugin) (?:install|marketplace add) ([^`\n]+)/g)].map(m => m[1]);
