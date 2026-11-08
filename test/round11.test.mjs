@@ -1,35 +1,71 @@
-// Tests for Council Dial Lite 1.0.0, the script-free edition in lite/: only Markdown, JSON and the
-// icon; brief templates byte-identical to the full edition's; its own name and description; runs that
-// the full edition never reads as its own; and the docs for both editions.
+// Tests for Council Dial Lite, the script-free edition, which lives in its own repository,
+// Ablation-Lab/council-dial-lite. Those tests read a clone of it: ../council-dial-lite next to this
+// repository, or the folder COUNCIL_DIAL_LITE_DIR names. Without the clone they're skipped, loudly;
+// with COUNCIL_DIAL_LITE_REQUIRED=1 a missing clone fails instead. The Lite repository itself holds no
+// tests or scripts. Checked there: only Markdown, JSON, the licence, plain repo files and the icon;
+// brief templates byte-identical to the full edition's; its own name, description and marketplace;
+// its SKILL.md rules and README. Checked here: Lite runs are never read as full runs, and this
+// repository's docs and marketplace point to the Lite repository.
 import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { execFileSync } from 'node:child_process';
 import { runCommand, parseArgs, councilType, stepCounts, VERSION, BRIEF_SHA256, briefDigest } from '../plugin/skills/council-dial/scripts/council.mjs';
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url));
-const LITE = path.join(ROOT, 'lite');
+const LITE = path.resolve(process.env.COUNCIL_DIAL_LITE_DIR || path.join(ROOT, '..', 'council-dial-lite'));
 const SKILL = path.join(LITE, 'skills/council-dial-lite');
 const FULL_BRIEFS = path.join(ROOT, 'plugin/skills/council-dial/briefs');
 const read = f => fs.readFileSync(path.join(ROOT, f), 'utf8');
+const readLite = f => fs.readFileSync(path.join(LITE, f), 'utf8');
 const made = [];
 const tmp = () => { const d = fs.mkdtempSync(path.join(os.tmpdir(), 'council-dial-r11-')); made.push(d); return d; };
 after(() => { for (const d of made) fs.rmSync(d, { recursive: true, force: true }); });
+const sectionsOf = text => Object.fromEntries([...text.matchAll(/^## (.+)\n(?:[^\n]*\n)*?```text\n([\s\S]*?)\n```$/gm)].map(m => [m[1], m[2]]));
+const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+
+// The Lite clone, found or not. A missing clone is never silent: a warning goes to stderr, every
+// Lite test is marked SKIP with the reason, and one test fails when COUNCIL_DIAL_LITE_REQUIRED=1.
+// A folder that exists counts as the clone, so a damaged clone fails rather than skips.
+const FOUND = fs.existsSync(LITE);
+const REQ = (process.env.COUNCIL_DIAL_LITE_REQUIRED ?? '').trim();
+const REQUIRED = REQ !== '' && REQ !== '0';
+const MISSING = `Council Dial Lite clone not found at ${LITE}: the cross-repository checks (templates byte-identical, no code files, manifests, SKILL.md, README) did NOT run. Clone Ablation-Lab/council-dial-lite next to this repository or set COUNCIL_DIAL_LITE_DIR, and set COUNCIL_DIAL_LITE_REQUIRED=1 to make this a failure.`;
+if (!FOUND) process.stderr.write(`\n${'!'.repeat(100)}\n!!! ${REQUIRED ? 'FAILING (COUNCIL_DIAL_LITE_REQUIRED is set)' : 'SKIPPED'}: ${MISSING}\n${'!'.repeat(100)}\n\n`);
+// git, when the clone is a git checkout and git is installed; null otherwise.
+const git = (...args) => { try { return execFileSync('git', ['-C', LITE, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }); } catch { return null; } };
+test('the Council Dial Lite clone is there to check', { skip: !FOUND && !REQUIRED ? `SKIPPED: ${MISSING}` : false }, () => {
+  assert.ok(FOUND, MISSING);
+});
+const liteTest = (name, a, b) => {
+  const [opts, fn] = b ? [a, b] : [{}, a];
+  return test(`Lite repository: ${name}`, { skip: FOUND ? (opts.skip ?? false) : `SKIPPED: ${MISSING}` }, fn);
+};
+
+// Every file the Lite repository holds or would commit: from git (tracked, plus untracked files
+// .gitignore doesn't exclude) when the clone is a git checkout, or every file outside .git otherwise.
 const walk = d => fs.readdirSync(d, { withFileTypes: true }).flatMap(e => {
+  if (e.name === '.git' && d === LITE) return [];
   const p = path.join(d, e.name);
   assert.ok(!e.isSymbolicLink(), `${p} is a link`);
   return e.isDirectory() ? walk(p) : [p];
 });
-const sectionsOf = text => Object.fromEntries([...text.matchAll(/^## (.+)\n(?:[^\n]*\n)*?```text\n([\s\S]*?)\n```$/gm)].map(m => [m[1], m[2]]));
-const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+const liteFiles = () => {
+  const listed = git('ls-files', '--cached', '--others', '--exclude-standard', '-z');
+  const files = listed == null ? walk(LITE) : listed.split('\0').filter(Boolean).map(f => path.join(LITE, f));
+  for (const f of files) assert.ok(!fs.lstatSync(f).isSymbolicLink(), `${f} is a link`);
+  return files;
+};
 
-test('lite/ holds only Markdown, JSON, the licence and the PNG icon, all UTF-8 text with no NUL bytes, byte order mark, CR or #! line', () => {
-  const files = walk(LITE);
+liteTest('holds only Markdown, JSON, the licence, plain repository files and the PNG icon: no scripts, code, tests or hooks', () => {
+  const files = liteFiles();
   const rel = files.map(f => path.relative(LITE, f).split(path.sep).join('/')).sort();
   assert.deepEqual(rel, [
-    '.claude-plugin/icon.png', '.claude-plugin/plugin.json', 'LICENSE', 'README.md',
+    '.claude-plugin/icon.png', '.claude-plugin/marketplace.json', '.claude-plugin/plugin.json',
+    '.gitattributes', '.gitignore', 'LICENSE', 'README.md',
     'skills/council-dial-lite/SKILL.md',
     ...['appeal', 'baseline', 'debate', 'judge', 'reviewer', 'shared'].map(b => `skills/council-dial-lite/briefs/${b}.md`),
     'skills/council-dial-lite/check-brief.md',
@@ -38,32 +74,53 @@ test('lite/ holds only Markdown, JSON, the licence and the PNG icon, all UTF-8 t
     const b = fs.readFileSync(f);
     assert.ok(b.length < 256 * 1024, `${f} is under 256 KiB`);
     if (f.endsWith('.png')) { assert.ok(b.subarray(0, 8).equals(PNG), f); continue; }
-    assert.ok(/\.(md|json)$/.test(f) || path.basename(f) === 'LICENSE', `${f} is Markdown, JSON or the licence`);
+    assert.ok(/\.(md|json)$/.test(f) || ['LICENSE', '.gitignore', '.gitattributes'].includes(path.basename(f)), `${f} is Markdown, JSON, the licence or a plain repository file`);
     assert.ok(!b.includes(0) && !b.includes(13) && b[0] !== 0xef, f);
-    assert.ok(!b.subarray(0, 2).equals(Buffer.from('#!')), `${f} starts with #!`);
-    assert.equal(Buffer.from(b.toString('utf8'), 'utf8').compare(b), 0, `${f} is valid UTF-8`);
+    const text = b.toString('utf8');
+    assert.equal(Buffer.from(text, 'utf8').compare(b), 0, `${f} is valid UTF-8`);
+    // No #! line anywhere, no shell code block, and no stale link to the old lite/ folder.
+    assert.doesNotMatch(text, /^#!/m, `${f} has a #! line`);
+    assert.doesNotMatch(text, /```(bash|sh|zsh|shell|powershell|pwsh|cmd|bat|js|javascript|mjs|node|python|py)\b/i, `${f} has a code block to run`);
+    assert.doesNotMatch(text, /council-dial\/(blob|tree)\/[^/\s]+\/lite\b|\]\(\.?\/lite\//, `${f} links to the old lite/ folder`);
   }
   assert.ok(fs.readFileSync(path.join(LITE, 'LICENSE')).equals(fs.readFileSync(path.join(ROOT, 'LICENSE'))));
   assert.ok(fs.readFileSync(path.join(LITE, '.claude-plugin/icon.png')).equals(fs.readFileSync(path.join(ROOT, 'plugin/.claude-plugin/icon.png'))));
+  // .gitattributes: nothing the directory refuses (export-ignore, export-subst, filters such as LFS).
+  assert.doesNotMatch(readLite('.gitattributes'), /export-ignore|export-subst|filter=/);
+  for (const sys of ['.DS_Store', 'Thumbs.db', 'desktop.ini']) assert.match(readLite('.gitignore'), new RegExp(`^${sys.replace('.', '\\.')}$`, 'm'));
+  // No git hooks set up in the clone: core.hooksPath unset in its own config, and only git's own
+  // .sample hooks in its hooks folder (found through git, so a worktree's real git folder is read).
+  if (git('rev-parse', '--git-dir') != null) {
+    assert.equal((git('config', '--local', '--get', 'core.hooksPath') ?? '').trim(), '');
+    const hooks = path.resolve(LITE, git('rev-parse', '--git-path', 'hooks').trim());
+    if (fs.existsSync(hooks)) assert.deepEqual(fs.readdirSync(hooks).filter(h => !h.endsWith('.sample')), []);
+  }
 });
 
-test('Lite\'s brief templates are byte-identical to the full edition\'s, and their texts match BRIEF_SHA256', () => {
+liteTest('when COUNCIL_DIAL_LITE_REQUIRED is set, everything checked is committed in the clone', { skip: !REQUIRED ? 'set COUNCIL_DIAL_LITE_REQUIRED=1 to also check the clone is committed' : false }, () => {
+  assert.notEqual(git('rev-parse', '--git-dir'), null, `${LITE} isn't a git checkout`);
+  assert.notEqual(git('rev-parse', '--verify', 'HEAD'), null, 'the Lite clone has no commits yet');
+  assert.equal(git('status', '--porcelain'), '', `the Lite clone has uncommitted changes:\n${git('status', '--porcelain')}`);
+  const tracked = git('ls-files', '-z').split('\0').filter(Boolean).sort();
+  const onDisk = liteFiles().map(f => path.relative(LITE, f).split(path.sep).join('/')).sort();
+  assert.deepEqual(tracked, onDisk);
+});
+
+liteTest('the brief templates are byte-identical to the full edition\'s, and their texts match BRIEF_SHA256', () => {
   const names = fs.readdirSync(FULL_BRIEFS).sort();
   assert.deepEqual(fs.readdirSync(path.join(SKILL, 'briefs')).sort(), names);
   const texts = {};
   for (const n of names) {
     const a = fs.readFileSync(path.join(FULL_BRIEFS, n)), b = fs.readFileSync(path.join(SKILL, 'briefs', n));
-    assert.ok(a.equals(b), `${n} differs between plugin/ and lite/`);
+    assert.ok(a.equals(b), `${n} differs between plugin/skills/council-dial/briefs/ here and skills/council-dial-lite/briefs/ in the Lite repository`);
     texts[n.replace(/\.md$/, '')] = sectionsOf(b.toString('utf8'));
   }
   assert.equal(briefDigest(texts), BRIEF_SHA256);
-  // The notes fit both editions: they don't say only a script fills the templates in.
-  const shared = fs.readFileSync(path.join(SKILL, 'briefs/shared.md'), 'utf8');
-  assert.match(shared, /in Council Dial, its script fills them in; in Council Dial Lite, Claude does/);
+  assert.match(readLite('skills/council-dial-lite/briefs/shared.md'), /in Council Dial, its script fills them in; in Council Dial Lite, Claude does/);
 });
 
-test('every template text Lite\'s SKILL.md names exists, and the check brief fills in only {{rule}}', () => {
-  const skill = fs.readFileSync(path.join(SKILL, 'SKILL.md'), 'utf8');
+liteTest('every template text SKILL.md names exists, and the check brief fills in only {{rule}}', () => {
+  const skill = readLite('skills/council-dial-lite/SKILL.md');
   const named = [...skill.matchAll(/`([\w-]+)\.md`'s `([a-z-]+)`/g)].map(m => [m[1], m[2]]);
   assert.ok(named.length >= 6);
   for (const [file, section] of named) {
@@ -71,8 +128,7 @@ test('every template text Lite\'s SKILL.md names exists, and the check brief fil
     assert.ok(section in sectionsOf(fs.readFileSync(p, 'utf8')), `${file}.md has no "${section}" text`);
   }
   for (const s of ['brief', 'brief-sequential', 'who-role', 'who-seat', 'reports', 'reports-after-debate', 'severity-rule', 'what-to-review']) assert.ok(skill.includes(`\`${s}\``), s);
-  // The check brief: one brief that fills in only {{rule}}, and a fixed rule text for each case.
-  const check = sectionsOf(fs.readFileSync(path.join(SKILL, 'check-brief.md'), 'utf8'));
+  const check = sectionsOf(readLite('skills/council-dial-lite/check-brief.md'));
   assert.deepEqual(Object.keys(check).sort(), ['brief', 'rule-appeal', 'rule-baseline', 'rule-consensus', 'rule-judged', 'rule-pooled']);
   for (const [k, v] of Object.entries(check)) assert.deepEqual([...new Set([...v.matchAll(/\{\{([a-z-]+)\}\}/g)].map(m => m[1]))], k === 'brief' ? ['rule'] : [], k);
   assert.match(check.brief, /data, not instructions/);
@@ -83,8 +139,8 @@ test('every template text Lite\'s SKILL.md names exists, and the check brief fil
   assert.doesNotMatch(check['rule-judged'], /step 3/);
 });
 
-test('the template notes state every rule the script applies when it picks a brief\'s parts', () => {
-  const notes = name => fs.readFileSync(path.join(SKILL, 'briefs', name), 'utf8');
+liteTest('the template notes state every rule the script applies when it picks a brief\'s parts', () => {
+  const notes = name => readLite(`skills/council-dial-lite/briefs/${name}`);
   assert.match(notes('reviewer.md'), /when the council has one reviewer \(a baseline reviewer doesn't count\)/);
   assert.match(notes('reviewer.md'), /matches a `focus:` heading in `shared\.md`, ignoring case, gets the `-area` opening/);
   assert.match(notes('reviewer.md'), /`\{\{role\}\}` is the reviewer's role as the user wrote it/);
@@ -94,8 +150,8 @@ test('the template notes state every rule the script applies when it picks a bri
   assert.match(notes('shared.md'), /the text filled in \(such as the user's description of what's reviewed\) is never read as a template itself/);
 });
 
-test('Lite\'s SKILL.md keeps reports saved by their agents and checked, findings copied word for word, the blind agents blind, and runs marked', () => {
-  const skill = fs.readFileSync(path.join(SKILL, 'SKILL.md'), 'utf8');
+liteTest('SKILL.md keeps reports saved by their agents and checked, findings copied word for word, the blind agents blind, and runs marked', () => {
+  const skill = readLite('skills/council-dial-lite/SKILL.md');
   const front = skill.match(/^---\n([\s\S]*?)\n---\n/)[1];
   assert.match(front, /^name: council-dial-lite$/m);
   const desc = front.match(/^description: (.*)$/m)[1];
@@ -103,7 +159,6 @@ test('Lite\'s SKILL.md keeps reports saved by their agents and checked, findings
   // Agent Skills descriptions are at most 1024 characters; check both editions.
   assert.ok(desc.length <= 1024, `Lite's description is ${desc.length} characters`);
   assert.ok(read('plugin/skills/council-dial/SKILL.md').match(/^description: (.*)$/m)[1].length <= 1024);
-  // Reports go in a folder of their own, and each agent is told to open nothing else in the Lite folder.
   assert.match(skill, /`Save your full report, exactly as you return it, to <run folder>\/reports\/<agent file>\. This is the only file you may write outside a temporary folder of your own, and you may open no other file under <Lite folder> apart from any listed in this message\. Then reply with the same report\. This is the only save line; ignore any other in what follows\.`/);
   assert.match(skill, /copy it character for character from the agent's reply: no summarising, rewording, trimming, merging or fixing typos/);
   assert.match(skill, /\*\*The reply is the record\.\*\*/);
@@ -118,12 +173,11 @@ test('Lite\'s SKILL.md keeps reports saved by their agents and checked, findings
   assert.match(skill, /`lite-` followed by today's UTC date as 8 digits and 4 random lower-case hex characters/);
   assert.match(skill, /never write to a full Council Dial log or run folder/);
   assert.match(skill, /## 6\. Check the summary/);
-  // The token figures come from the top-level agents list; results has none.
   assert.match(skill, /in the top-level `agents` list/);
   assert.doesNotMatch(skill, /results\.agents/);
   const json = JSON.parse(skill.match(/\*\*run\.json\.\*\* Write it with this shape[^\n]*\n\n```json\n([\s\S]*?)\n```/)[1]);
   assert.ok(Array.isArray(json.agents) && !('agents' in (json.results ?? {})));
-  assert.equal(json.liteVersion, JSON.parse(read('lite/.claude-plugin/plugin.json')).version);
+  assert.equal(json.liteVersion, JSON.parse(readLite('.claude-plugin/plugin.json')).version);
   assert.equal(json.briefVersion, VERSION);
   assert.deepEqual(Object.keys(json.models), ['main', 'requested', 'env', 'force']);
   assert.match(json.runId, /^lite-[0-9]{8}-[0-9a-f]{4}$/);
@@ -131,14 +185,86 @@ test('Lite\'s SKILL.md keeps reports saved by their agents and checked, findings
   const count = argv => Object.values(stepCounts(councilType(parseArgs(['estimate', ...argv]), {}).type)).reduce((a, b) => a + b, 0) + 1;
   const presets = { Standard: count(['--reviewers', 'specialised', '--combine', 'judged']), Quick: count(['--reviewers', 'generalist', '--combine', 'pooled']), Thorough: count(['--reviewers', 'specialised', '--combine', 'judged', '--debate', '--baseline']) };
   for (const [preset, n] of Object.entries(presets)) assert.match(skill, new RegExp(`\\| ${preset} \\| [^|]+ \\| ${n} `));
-  assert.match(read('lite/README.md'), new RegExp(`Standard \\(${presets.Standard} agents\\), Quick \\(${presets.Quick}\\) and Thorough \\(${presets.Thorough}\\)`));
+  assert.match(readLite('README.md'), new RegExp(`Standard \\(${presets.Standard} agents\\), Quick \\(${presets.Quick}\\) and Thorough \\(${presets.Thorough}\\)`));
   const largest = count(['--reviewers', 'specialised', '--roles', 'a, b, c, d, e, f, g, h, i', '--combine', 'judged', '--debate', '--baseline']);
   assert.match(skill, new RegExp(`largest custom council is ${largest} agents with the check`));
-  assert.match(read('lite/README.md'), new RegExp(`up to ${largest} for the largest council`));
-  // The label rule covers custom roles, as the script builds them.
+  assert.match(readLite('README.md'), new RegExp(`up to ${largest} for the largest council`));
   assert.match(skill, /`lite: specialised-2 \[api, perf\]\/judged\+debate\+appeal @sonnet`/);
-  // No script, and no command for Claude to run one.
   assert.doesNotMatch(skill, /\bnode\b|council\.mjs|```(bash|sh|powershell)/i);
+  // The maintainers' note says where the briefs come from.
+  assert.match(skill, /The briefs\/ folder is a copy of plugin\/skills\/council-dial\/briefs\/ in Ablation-Lab\/council-dial and must stay byte-identical to it/);
+});
+
+liteTest('the manifest names it the lighter edition, links the full one plainly, and matches its own marketplace', () => {
+  const lite = JSON.parse(readLite('.claude-plugin/plugin.json'));
+  const full = JSON.parse(read('plugin/.claude-plugin/plugin.json'));
+  const market = JSON.parse(readLite('.claude-plugin/marketplace.json'));
+  // Only metadata: no hooks, MCP or LSP servers, commands, agents or other components declared inline.
+  assert.deepEqual(Object.keys(lite).sort(), ['author', 'description', 'displayName', 'documentationUrl', 'homepage', 'icon', 'keywords', 'license', 'name', 'privacyPolicyUrl', 'repository', 'supportUrl', 'version']);
+  assert.deepEqual(Object.keys(market).sort(), ['description', 'name', 'owner', 'plugins']);
+  assert.equal(market.plugins.length, 1);
+  assert.deepEqual(Object.keys(market.plugins[0]).sort(), ['category', 'description', 'name', 'source', 'version']);
+  assert.ok(lite.description.length <= 500, `the listing description is ${lite.description.length} characters`);
+  assert.equal(lite.name, 'council-dial-lite');
+  assert.equal(lite.displayName, 'Council Dial Lite');
+  assert.match(lite.version, /^\d+\.\d+\.\d+$/);
+  assert.match(lite.description, /^The lighter, script-free edition of Council Dial\./);
+  assert.match(lite.description, /for research runs, use the full Council Dial: https:\/\/github\.com\/Ablation-Lab\/council-dial\./);
+  assert.doesNotMatch(lite.description, /\/plugin|install|--marketplace/i);
+  assert.notEqual(lite.description, full.description);
+  assert.equal(lite.license, 'MIT');
+  assert.ok(fs.existsSync(path.join(LITE, lite.icon)));
+  const R = 'https://github.com/Ablation-Lab/council-dial-lite';
+  assert.equal(lite.homepage, R); assert.equal(lite.repository, R);
+  assert.equal(lite.documentationUrl, `${R}/blob/main/README.md`);
+  assert.equal(lite.supportUrl, `${R}/issues`);
+  assert.equal(lite.privacyPolicyUrl, `${R}/blob/main/README.md#privacy`);
+  assert.match(readLite('README.md'), /^## Privacy$/m);
+  assert.equal(market.name, 'council-dial-lite');
+  assert.deepEqual(market.plugins.map(x => [x.name, x.source]), [['council-dial-lite', './']]);
+  assert.equal(market.plugins[0].description, lite.description);
+  assert.equal(market.plugins[0].version, lite.version);
+});
+
+liteTest('README explains the two editions, installs only Lite, and states only what was confirmed', () => {
+  const lite = readLite('README.md');
+  assert.match(lite, /^## Two editions$/m);
+  // A plain link to the full edition and its README, and install steps for Lite only.
+  assert.match(lite, /\[Council Dial\]\(https:\/\/github\.com\/Ablation-Lab\/council-dial\)/);
+  assert.match(lite, /\| Installed from \| see \[its README\]\(https:\/\/github\.com\/Ablation-Lab\/council-dial\) \|/);
+  assert.doesNotMatch(lite, /Ablation-Lab\/council-dial#install/);
+  // What it runs is disclosed: the shell only for the link check, and the material's code only if allowed.
+  assert.match(lite, /Claude lists the Lite folder and the folders above it with your session's shell tool, to check none is a link, and uses the shell for nothing else/);
+  assert.match(lite, /They run code from the material only if you say they may/);
+  assert.match(lite, /asks you to confirm adding it; then it opens the plugin's page/);
+  assert.match(lite, /\(which asks you again in Manual mode\)/);
+  assert.match(lite, /`claude -p` and SDK sessions never apply allow rules from `\.claude\/settings\.json`\./);
+  const skillFront = readLite('skills/council-dial-lite/SKILL.md').match(/^---\n([\s\S]*?)\n---\n/)[1];
+  assert.match(skillFront, /^compatibility: .*a shell tool, where the session has one, only to check the Lite folder isn't a link/m);
+  const installs = [...lite.matchAll(/(?:\/plugin|claude plugin) (?:install|marketplace add) ([^`\n]+)/g)].map(m => m[1]);
+  assert.ok(installs.length >= 4);
+  for (const i of installs) assert.match(i, /council-dial-lite/, i);
+  assert.doesNotMatch(lite, /--marketplace Ablation-Lab\/council-dial(?!-lite)|@council-dial(?!-lite)\b/);
+  assert.match(lite, /\/plugin install council-dial-lite --marketplace Ablation-Lab\/council-dial-lite/);
+  assert.match(lite, /https:\/\/github\.com\/Ablation-Lab\/council-dial-lite\/issues/);
+  // The permission rule and what's said about it.
+  assert.match(lite, /"allow": \["Edit\(\/reviews\/lite\/\*\*\)"\]/);
+  const rule = JSON.parse(lite.match(/```json\n([\s\S]*?)\n\s*```/)[1].replace(/^ {2}/gm, ''));
+  assert.deepEqual(rule, { permissions: { allow: ['Edit(/reviews/lite/**)'] } });
+  assert.match(lite, /Claude Code applies a project's allow rules only after you've accepted the trust dialog for the folder/);
+  assert.match(lite, /a path that starts with `\/` is read from the folder you started Claude Code in/);
+  assert.match(lite, /The rule lets any agent in the session write anywhere under `reviews\/lite\/`, earlier runs included\./);
+  assert.match(lite, /Claude Code applies it to the whole session, every later agent included/);
+  assert.match(lite, /\*\*Allow writes to the Lite folder only \(recommended\):\*\*/);
+  assert.match(lite, /each agent's report \(the check's included\) in `reports\/`/);
+  assert.match(lite, /Lite asks, but the full edition doesn't/);
+  assert.doesNotMatch(lite, /can't run its script or start subagents|councils don't work in plain chat/);
+  assert.match(lite, /Anthropic's docs don't say which chat or Cowork sessions have/);
+  // The directory shows the README: at least 40 words outside code blocks, and the sign-off last.
+  assert.ok(lite.replace(/```[\s\S]*?```/g, '').split(/\s+/).filter(Boolean).length >= 40);
+  assert.ok(lite.trimEnd().endsWith('\n\nResearch by Ablation Lab.'));
+  assert.equal(lite.split('Research by Ablation Lab.').length, 2);
+  for (const [l, prev] of lite.split('\n').map((l, i, a) => [l, a[i - 1]])) if (l.startsWith('#') && prev !== undefined) assert.equal(prev, '', `blank line before ${l}`);
 });
 
 test('a Lite run id is never read as one of the full edition\'s runs', () => {
@@ -152,61 +278,21 @@ test('a Lite run id is never read as one of the full edition\'s runs', () => {
   assert.equal(list.skippedLogLines, 1);
 });
 
-test('Lite\'s manifest names it the lighter edition, links the full one, and matches its marketplace entry', () => {
-  const lite = JSON.parse(read('lite/.claude-plugin/plugin.json'));
-  const full = JSON.parse(read('plugin/.claude-plugin/plugin.json'));
+test('this repository holds no copy of Lite, lists only the full edition, and points to the Lite repository', () => {
+  assert.equal(fs.existsSync(path.join(ROOT, 'lite')), false);
   const market = JSON.parse(read('.claude-plugin/marketplace.json'));
-  assert.equal(lite.name, 'council-dial-lite');
-  assert.equal(lite.displayName, 'Council Dial Lite');
-  assert.equal(lite.version, '1.0.0');
-  assert.match(lite.description, /^The lighter, script-free edition of Council Dial\./);
-  assert.match(lite.description, /for research runs, use the full Council Dial: https:\/\/github\.com\/Ablation-Lab\/council-dial\./);
-  assert.notEqual(lite.description, full.description);
-  assert.equal(lite.license, 'MIT');
-  assert.ok(fs.existsSync(path.join(LITE, lite.icon)));
-  for (const k of ['homepage', 'documentationUrl', 'supportUrl', 'privacyPolicyUrl']) assert.match(lite[k], /^https:\/\//);
-  assert.match(lite.privacyPolicyUrl, /lite\/README\.md#privacy$/);
-  assert.match(read('lite/README.md'), /^## Privacy$/m);
-  assert.deepEqual(market.plugins.map(x => [x.name, x.source]), [['council-dial', './plugin'], ['council-dial-lite', './lite']]);
-  const entry = market.plugins[1];
-  assert.equal(entry.description, lite.description);
-  assert.equal(entry.version, lite.version);
-  assert.equal(market.plugins[0].version, full.version);
-});
-
-test('the READMEs explain the two editions, the permission rule and only what was confirmed about chat and Cowork', () => {
+  assert.deepEqual(market.plugins.map(x => [x.name, x.source]), [['council-dial', './plugin']]);
+  assert.equal(market.plugins[0].version, JSON.parse(read('plugin/.claude-plugin/plugin.json')).version);
   for (const f of ['README.md', 'plugin/README.md']) {
     const s = read(f);
     assert.match(s, /^## Two editions$/m);
-    assert.match(s, /\[Council Dial Lite\]\(https:\/\/github\.com\/Ablation-Lab\/council-dial\/blob\/main\/lite\/README\.md\)/);
+    assert.match(s, /It has its own repository, \[Ablation-Lab\/council-dial-lite\]\(https:\/\/github\.com\/Ablation-Lab\/council-dial-lite\)/);
+    assert.match(s, /`\/plugin install council-dial-lite --marketplace Ablation-Lab\/council-dial-lite`/);
+    assert.doesNotMatch(s, /council-dial\/(blob|tree)\/[^/\s]+\/lite\b|\]\(\.?\/lite\/|council-dial-lite@council-dial\b|--marketplace Ablation-Lab\/council-dial`, or `council-dial-lite/);
     assert.match(s, /Use Council Dial for runs you'll report as research\./);
-    // The Lite install commands keep this repository's marketplace; only the plugin name changes.
-    assert.match(s, /replace only the plugin name: `\/plugin install council-dial-lite --marketplace Ablation-Lab\/council-dial`, or `council-dial-lite@council-dial`/);
-    assert.doesNotMatch(s, /in place of `council-dial` in these commands|doesn't accept that kind of file from publishers/);
     assert.match(s, /our submission of the full edition to Anthropic's plugin directory was turned down because of its script/);
-  }
-  const lite = read('lite/README.md');
-  assert.match(lite, /^## Two editions$/m);
-  assert.match(lite, /"allow": \["Edit\(\/reviews\/lite\/\*\*\)"\]/);
-  const rule = JSON.parse(lite.match(/```json\n([\s\S]*?)\n\s*```/)[1].replace(/^ {2}/gm, ''));
-  assert.deepEqual(rule, { permissions: { allow: ['Edit(/reviews/lite/**)'] } });
-  assert.match(lite, /Claude Code applies a project's allow rules only after you've accepted the trust dialog for the folder/);
-  assert.match(lite, /`claude -p` and SDK sessions never apply allow rules from `\.claude\/settings\.json`\./);
-  assert.match(lite, /a path that starts with `\/` is read from the folder you started Claude Code in/);
-  assert.match(lite, /The rule lets any agent in the session write anywhere under `reviews\/lite\/`, earlier runs included\./);
-  assert.match(lite, /Claude Code applies it to the whole session, every later agent included/);
-  assert.match(lite, /\*\*Allow writes to the Lite folder only \(recommended\):\*\*/);
-  assert.match(lite, /\/plugin install council-dial-lite --marketplace Ablation-Lab\/council-dial/);
-  assert.match(lite, /each agent's report \(the check's included\) in `reports\/`/);
-  assert.match(lite, /Lite asks, but the full edition doesn't/);
-  for (const f of ['README.md', 'plugin/README.md', 'lite/README.md']) {
-    const s = read(f);
     assert.doesNotMatch(s, /can't run its script or start subagents|councils don't work in plain chat/, f);
     assert.match(s, /Anthropic's docs don't say which chat or Cowork sessions have/, f);
   }
-  // The directory shows the README: at least 40 words outside code blocks, and the sign-off last.
-  assert.ok(lite.replace(/```[\s\S]*?```/g, '').split(/\s+/).filter(Boolean).length >= 40);
-  assert.ok(lite.trimEnd().endsWith('\n\nResearch by Ablation Lab.'));
-  assert.equal(lite.split('Research by Ablation Lab.').length, 2);
-  for (const line of lite.split('\n').map((l, i, a) => [l, a[i - 1]])) if (line[0].startsWith('#') && line[1] !== undefined) assert.equal(line[1], '', `blank line before ${line[0]}`);
+  assert.match(read('README.md'), /set `COUNCIL_DIAL_LITE_REQUIRED=1` to make a missing clone fail instead/);
 });

@@ -25,10 +25,10 @@ It was made for research on review councils, where the question isn't only "what
 
 ## Two editions
 
-Council Dial comes in two editions, from this repository:
+Council Dial comes in two editions:
 
-- **Council Dial** (this plugin) is for research runs. A local script fills in the briefs, refuses counts that don't add up before they're logged, keeps the review log and works out the comparison table. It needs Claude Code and Node.js.
-- **Council Dial Lite** is the script-free edition, for places where a script can't run or isn't accepted: our submission of the full edition to Anthropic's plugin directory was turned down because of its script, and Lite is the edition we submit there instead. In Lite, Claude does every step with its own tools, from the same brief templates. Each agent saves its own report, and a fresh agent checks the summary against the reports. See [Council Dial Lite](https://github.com/Ablation-Lab/council-dial/blob/main/lite/README.md).
+- **Council Dial** (this plugin, from this repository) is for research runs. A local script fills in the briefs, refuses counts that don't add up before they're logged, keeps the review log and works out the comparison table. It needs Claude Code and Node.js.
+- **Council Dial Lite** is the script-free edition, for places where a script can't run or isn't accepted: our submission of the full edition to Anthropic's plugin directory was turned down because of its script, and Lite is the edition we submit there instead. In Lite, Claude does every step with its own tools, from the same brief templates. Each agent saves its own report, and a fresh agent checks the summary against the reports. It has its own repository, [Ablation-Lab/council-dial-lite](https://github.com/Ablation-Lab/council-dial-lite), which holds only its Markdown, JSON and icon.
 
 The trade-off: Lite needs no Node.js, but nothing checks its log mechanically. Claude checks the counts, and works out estimates and the comparison table, by hand, so they can contain mistakes, and Lite can't read the session's effort level. Lite runs are logged on their own, in `reviews/lite/`, marked `"edition": "council-dial-lite"`, with labels starting `lite:` and run ids starting `lite-`, so they never mix with research runs. Use Council Dial for runs you'll report as research.
 
@@ -40,7 +40,7 @@ In Claude Code 2.1.275 or later, run this in a session:
 /plugin install council-dial --marketplace Ablation-Lab/council-dial
 ```
 
-It opens the plugin's page in `/plugin`, where you choose a scope and install it. From a shell, `claude plugin install council-dial --marketplace Ablation-Lab/council-dial` does the same in Claude Code 2.1.292 or later. On older versions, add the marketplace first with `/plugin marketplace add Ablation-Lab/council-dial`, then `/plugin install council-dial@council-dial`. To use the skill without the plugin, copy the `plugin/skills/council-dial` folder into `~/.claude/skills/`. It needs Node.js 18 or later. For the script-free edition, which needs no Node.js, replace only the plugin name: `/plugin install council-dial-lite --marketplace Ablation-Lab/council-dial`, or `council-dial-lite@council-dial` (see [Two editions](#two-editions)).
+It opens the plugin's page in `/plugin`, where you choose a scope and install it. From a shell, `claude plugin install council-dial --marketplace Ablation-Lab/council-dial` does the same in Claude Code 2.1.292 or later. On older versions, add the marketplace first with `/plugin marketplace add Ablation-Lab/council-dial`, then `/plugin install council-dial@council-dial`. To use the skill without the plugin, copy the `plugin/skills/council-dial` folder into `~/.claude/skills/`. It needs Node.js 18 or later. The script-free edition, which needs no Node.js, comes from its own repository: `/plugin install council-dial-lite --marketplace Ablation-Lab/council-dial-lite` (see [Two editions](#two-editions) and [its README](https://github.com/Ablation-Lab/council-dial-lite#install)).
 
 ## How it works
 
@@ -212,7 +212,6 @@ MIT. See the LICENSE file in the repository.
 |---|---|
 | `plugin/` | the plugin folder (Plugin path `plugin` in the directory portal) |
 | `plugin/skills/council-dial/` | the skill: `SKILL.md`, `scripts/council.mjs`, and the brief templates in `briefs/` |
-| `lite/` | Council Dial Lite, the script-free edition (Plugin path `lite` in the directory portal): Markdown, JSON and the icon only |
 | `samples/` | a made-up target with planted problems, and a sample review log |
 | `sample-answers/` | the sample target's expected findings, kept out of `samples/` so they aren't copied along with it (see Try it for what keeps them from a council) |
 | `results/` | write-ups of real council runs on the sample, scored against the expected findings |
@@ -225,7 +224,15 @@ MIT. See the LICENSE file in the repository.
 - Run the tests with `node --test` from the repository root.
 - The privacy check (`scripts/privacy-check.sh`) runs before every commit; turn it on once per clone with `git config core.hooksPath .githooks`.
 - Keep `plugin/README.md` and `SKILL.md` in step, and the versions in `plugin.json` and `marketplace.json` equal.
-- Keep `lite/skills/council-dial-lite/briefs/` byte-identical to `plugin/skills/council-dial/briefs/` (a test checks), and `lite/README.md` in step with Lite's `SKILL.md`. Nothing in `lite/` may be a script or start with `#!`.
+- Council Dial Lite lives in [Ablation-Lab/council-dial-lite](https://github.com/Ablation-Lab/council-dial-lite), which must never hold a script, a `#!` line, tests or hooks; its tests live here, in `test/round11.test.mjs`. Clone it next to this repository (`../council-dial-lite`), or set `COUNCIL_DIAL_LITE_DIR` to its path, so `node --test` checks it. Without the clone, those tests are skipped with a warning; set `COUNCIL_DIAL_LITE_REQUIRED=1` to make a missing clone fail instead, and do that before every commit that touches the briefs.
+- Lite's six brief templates (`skills/council-dial-lite/briefs/` there) must stay byte-identical to `plugin/skills/council-dial/briefs/` here, notes included. To change the briefs:
+  1. Edit them here.
+  2. If a `text` block changed, raise the brief version (`VERSION` in `council.mjs`) and set `BRIEF_SHA256` there to the new texts' digest; a change to the notes alone needs neither.
+  3. Raise Council Dial's own version: `PLUGIN_VERSION` in `council.mjs`, `plugin/.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`, and the version test in `test/round8.test.mjs`.
+  4. Copy the six files into the Lite clone's `skills/council-dial-lite/briefs/`.
+  5. In the Lite clone, raise Lite's version in `.claude-plugin/plugin.json` and `.claude-plugin/marketplace.json`, and `liteVersion` (and `briefVersion`, if step 2 applied) in the `run.json` example in its SKILL.md.
+  6. Commit in the Lite clone, then run `COUNCIL_DIAL_LITE_REQUIRED=1 node --test` here: it fails if the copies differ, the versions disagree, or the Lite clone has anything uncommitted.
+  7. Commit here, then push both repositories.
 - Keep this README and `plugin/README.md` in step: when either changes, make the same change in the other (apart from the paths, which this one gives from the repository root, and these last two sections).
 
 Research by Ablation Lab.

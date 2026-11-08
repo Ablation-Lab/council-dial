@@ -25,10 +25,10 @@ It was made for research on review councils, where the question isn't only "what
 
 ## Two editions
 
-Council Dial comes in two editions, from this repository:
+Council Dial comes in two editions:
 
-- **Council Dial** (this plugin) is for research runs. A local script fills in the briefs, refuses counts that don't add up before they're logged, keeps the review log and works out the comparison table. It needs Claude Code and Node.js.
-- **Council Dial Lite** is the script-free edition, for places where a script can't run or isn't accepted: our submission of the full edition to Anthropic's plugin directory was turned down because of its script, and Lite is the edition we submit there instead. In Lite, Claude does every step with its own tools, from the same brief templates. Each agent saves its own report, and a fresh agent checks the summary against the reports. See [Council Dial Lite](https://github.com/Ablation-Lab/council-dial/blob/main/lite/README.md).
+- **Council Dial** (this plugin, from this repository) is for research runs. A local script fills in the briefs, refuses counts that don't add up before they're logged, keeps the review log and works out the comparison table. It needs Claude Code and Node.js.
+- **Council Dial Lite** is the script-free edition, for places where a script can't run or isn't accepted: our submission of the full edition to Anthropic's plugin directory was turned down because of its script, and Lite is the edition we submit there instead. In Lite, Claude does every step with its own tools, from the same brief templates. Each agent saves its own report, and a fresh agent checks the summary against the reports. It has its own repository, [Ablation-Lab/council-dial-lite](https://github.com/Ablation-Lab/council-dial-lite), which holds only its Markdown, JSON and icon.
 
 The trade-off: Lite needs no Node.js, but nothing checks its log mechanically. Claude checks the counts, and works out estimates and the comparison table, by hand, so they can contain mistakes, and Lite can't read the session's effort level. Lite runs are logged on their own, in `reviews/lite/`, marked `"edition": "council-dial-lite"`, with labels starting `lite:` and run ids starting `lite-`, so they never mix with research runs. Use Council Dial for runs you'll report as research.
 
@@ -40,7 +40,7 @@ In Claude Code 2.1.275 or later, run this in a session:
 /plugin install council-dial --marketplace Ablation-Lab/council-dial
 ```
 
-It opens the plugin's page in `/plugin`, where you choose a scope and install it. From a shell, `claude plugin install council-dial --marketplace Ablation-Lab/council-dial` does the same in Claude Code 2.1.292 or later. On older versions, add the marketplace first with `/plugin marketplace add Ablation-Lab/council-dial`, then `/plugin install council-dial@council-dial`. To use the skill without the plugin, copy the `skills/council-dial` folder into `~/.claude/skills/`. It needs Node.js 18 or later. For the script-free edition, which needs no Node.js, replace only the plugin name: `/plugin install council-dial-lite --marketplace Ablation-Lab/council-dial`, or `council-dial-lite@council-dial` (see [Two editions](#two-editions)).
+It opens the plugin's page in `/plugin`, where you choose a scope and install it. From a shell, `claude plugin install council-dial --marketplace Ablation-Lab/council-dial` does the same in Claude Code 2.1.292 or later. On older versions, add the marketplace first with `/plugin marketplace add Ablation-Lab/council-dial`, then `/plugin install council-dial@council-dial`. To use the skill without the plugin, copy the `skills/council-dial` folder into `~/.claude/skills/`. It needs Node.js 18 or later. The script-free edition, which needs no Node.js, comes from its own repository: `/plugin install council-dial-lite --marketplace Ablation-Lab/council-dial-lite` (see [Two editions](#two-editions) and [its README](https://github.com/Ablation-Lab/council-dial-lite#install)).
 
 ## How it works
 
