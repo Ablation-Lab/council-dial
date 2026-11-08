@@ -274,6 +274,11 @@ test('docs: the README says what keeps the answer key from the reviewers, and bo
     assert.ok(t.includes(PRICING_URL), f);
     assert.match(t, /estimate/, f);
     assert.match(t, /kept share isn't comparable across combine methods.*scores higher by construction.*answer key/, f);
+    // The sign-off comes once, as the last line, and every section heading has a blank line before it.
+    assert.equal(t.split('Research by Ablation Lab.').length - 1, 1, `${f}: the sign-off appears once`);
+    assert.ok(t.trimEnd().endsWith('\n\nResearch by Ablation Lab.'), `${f}: the sign-off is the last line, after a blank line`);
+    const lines = t.split(/\r?\n/);
+    lines.forEach((l, i) => { if (/^#{1,6} /.test(l) && i > 0) assert.equal(lines[i - 1], '', `${f}:${i + 1}: a blank line before "${l}"`); });
   }
   assert.match(fs.readFileSync(path.join(ROOT, 'plugin/skills/council-dial/SKILL.md'), 'utf8'), /different combine methods, say that their kept shares aren't comparable/);
   assert.ok(!/can't read it/.test(fs.readFileSync(path.join(ROOT, 'sample-answers', 'expected-findings.md'), 'utf8')));

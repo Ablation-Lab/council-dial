@@ -120,3 +120,32 @@ test('N11 and the README wording (N5 to N8): the docs say what was measured and 
     assert.match(t, /smaller trial run/, f);
   }
 });
+
+test('R2: a row that lists more agents than the run had, or agents at the wrong steps, is marked, not shown as a whole total', () => {
+  const q = tmp();
+  const planned = runId => ({ kind: 'planned', runId, version: 2, time: '2026-11-07T10:00:00Z', target: 'x', type: { reviewers: 'generalist', n: 3, combine: 'judged', appeal: true } });
+  const results = (runId, agents) => ({ kind: 'results', runId, time: '2026-11-07T10:00:00Z', results: { findingsCombined: 2, confirmed: 2, overstated: 0, dismissed: 0, verified: true, agents } });
+  const rev = i => agent(`reviewer ${i}`, 'review', 10, 1000);
+  writeLog(q, [
+    // Logged before 1.3.0's checks: an appeal agent listed, but no appeal field, so the run had 4.
+    planned('20261107-0001'), results('20261107-0001', [rev(1), rev(2), rev(3), agent('judge', 'combine', 10, 1000), agent('appeal', 'appeal', 10, 1000)]),
+    planned('20261107-0002'), results('20261107-0002', [rev(1), rev(2), rev(3), agent('judge', 'combine', 10, 1000), agent('appeal', 'appeal', null, 1000)]),
+    // The right number of agents, but a reviewer logged at the judge's step.
+    planned('20261107-0003'), results('20261107-0003', [rev(1), rev(2), agent('reviewer 3', 'combine', 10, 1000), agent('judge', 'combine', 10, 1000)]),
+    // A complete run, unmarked.
+    planned('20261107-0004'), results('20261107-0004', [rev(1), rev(2), rev(3), agent('judge', 'combine', 10, 1000)]),
+  ]);
+  const g = run(q, ['compare']).byType[0];
+  assert.deepEqual([g.tokensPerRun, g.tokenRuns], [40, 1], 'only the complete run is averaged in');
+  const m = md(q);
+  assert.match(m, /\| 20261107-0001 \|.*\| 50 \(5 listed, run had 4\) \|/);
+  assert.match(m, /\| 20261107-0002 \|.*\| 40 \(5 listed, run had 4, 4 with tokens\) \|/);
+  assert.match(m, /\| 20261107-0003 \|.*\| 40 \(agents don't match the run's steps\) \|/);
+  assert.match(m, /\| 20261107-0004 \|.*\| 40 \| /);
+});
+
+test('R4: two agents with the same label get an error that says so, not one that repeats the label', () => {
+  const plan = extra => buildPlan(parseArgs(['plan', '--reviewers', 'specialised', '--combine', 'pooled', ...extra, '--roles', '1, 1 (debate)']), T);
+  assert.throws(() => plan(['--debate']), /two agents would both have the label "reviewer: 1 \(debate\)"/);
+  assert.equal(plan([]).agentCount, 2, 'without a debate round the labels differ');
+});

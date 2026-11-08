@@ -209,7 +209,8 @@ function checkReportNames(type) {
   const files = new Map();
   for (const l of agentLabels(type)) {
     const f = reportName(l);
-    if (files.has(f)) throw new Error(`"${files.get(f)}" and "${l}" would save their reports to the same file (${f}); name the roles so they differ in their letters a to z or digits`);
+    if (files.get(f) === l) throw new Error(`two agents would both have the label "${l}", so their reports would go to the same file (${f}); rename a role so every agent's label differs (a role that is another role's name followed by " (debate)" does this in a council with a debate round)`);
+    if (files.has(f)) throw new Error(`"${files.get(f)}" and "${l}" would save their reports to the same file (${f}), whose name is made from the letters a to z and digits in an agent's label; rename the roles so those differ`);
     files.set(f, l);
   }
 }
@@ -258,10 +259,11 @@ export function councilType(o, env = {}) {
   checkReportNames(type);
   return { type, label: labelOf(type), modelWarnings };
 }
-const agentTotal = type => Object.values(stepCounts(type)).reduce((s, x) => s + x, 0);
+// The most agents a type can start (its plan), counting the appeal agent whenever the type has one.
+const plannedAgents = type => Object.values(stepCounts(type)).reduce((s, x) => s + x, 0);
 // The agents a logged run had: every step's, and the appeal only if it ran.
 const agentsOf = (type, res) => ({ ...stepCounts(type), appeal: type.appeal && res?.appeal?.ran === true ? 1 : 0 });
-const agentsTotal = (type, res) => Object.values(agentsOf(type, res)).reduce((s, x) => s + x, 0);
+const agentsHad = (type, res) => Object.values(agentsOf(type, res)).reduce((s, x) => s + x, 0);
 // Whether a results row lists exactly the agents the run had (one per seat, at its step). Tokens and
 // the critical path are worked out only from a complete list, so a run with an agent left out
 // doesn't look cheaper or quicker than it was.
@@ -540,7 +542,7 @@ export function estimateOf(runs, type, label) {
   const same = runs.filter(r => r.label === label);
   const logged = same.filter(r => r.results);
   const counted = logged.map(r => ({ r, tokens: runTokens(r.type, r.results) })).filter(x => x.tokens != null);
-  const agentCount = agentTotal(type);
+  const agentCount = plannedAgents(type);
   const quick = type.reviewers === 'generalist' && type.combine === 'pooled' && type.n <= 3 && !type.debate && !type.baseline;
   const trial = `a smaller trial run first: ${quick ? '' : 'a Quick council (3 generalist reviewers, pooled), or '}this council on one part of the material, logged like any other run`;
   const notes = [];
@@ -586,11 +588,17 @@ function markdown(runs) {
     for (const r of runs) {
       const res = r.results, fx = r.updates.reduce((a, u) => ({ made: a.made + u.fixesMade, failed: a.failed + u.fixesFailedRecheck }), { made: 0, failed: 0 });
       const ap = r.type.appeal && res?.appeal ? (res.appeal.ran ? `${res.appeal.items.length} of ${res.appeal.reviewed} flagged, ${res.appeal.items.filter(x => x.call === 'reinstated').length} reinstated` : 'nothing dismissed') : '-';
-      // The tokens reported, marked "k of n agents" when fewer than the run's agents have them, whether
-      // an agent's tokens are missing or the agent was left out of the list.
-      const known = res?.agents?.filter(x => x.tokens != null) ?? [];
-      const had = res ? agentsTotal(r.type, res) : 0;
-      const tok = known.length ? `${known.reduce((s, x) => s + x.tokens, 0)}${known.length < had ? ` (${known.length} of ${had} agents)` : ''}` : '-';
+      // The tokens reported, marked whenever the total isn't the run's whole total (and so isn't counted
+      // in tokens per run): "k of n agents" when fewer than the run's agents have them, whether an
+      // agent's tokens are missing or the agent was left out; "k listed, run had n" when the row lists
+      // more agents than the run had (possible only in rows logged before 1.3.0); and "agents don't
+      // match the run's steps" when the count is right but the steps aren't.
+      const listed = res?.agents ?? [], known = listed.filter(x => x.tokens != null);
+      const had = res ? agentsHad(r.type, res) : 0;
+      const mark = listed.length > had ? ` (${listed.length} listed, run had ${had}${known.length < listed.length ? `, ${known.length} with tokens` : ''})`
+        : known.length < had ? ` (${known.length} of ${had} agents)`
+        : !agentsComplete(r.type, res) ? " (agents don't match the run's steps)" : '';
+      const tok = known.length ? `${known.reduce((s, x) => s + x.tokens, 0)}${mark}` : '-';
       const min = res ? minutesText(res.wallMinutes, res.criticalPathMinutes, res.unlabelledMinutes) : '-';
       const found = res ? `${res.findingsCombined}${r.resultsLogged > 1 ? ' (re-logged)' : ''}` : 'not logged';
       L.push(`| ${r.runId} | ${cell(r.time.slice(0, 10))} | ${cell(r.label)} | ${cell(r.target)} | ${found} | ${res ? (res.verified ? `${kept(res)} (${res.overstated})` : 'unverified') : '-'} | ${res ? (res.verified ? res.dismissed : '-') : '-'} | ${min} | ${tok} | ${r.updates.length ? `${fx.failed} of ${fx.made}` : '-'} | ${res?.baseline ? res.baseline.confirmed : '-'} | ${ap} |`);
