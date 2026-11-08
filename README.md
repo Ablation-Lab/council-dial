@@ -109,8 +109,8 @@ What the log records, and what Claude Code doesn't make available:
 ## Where it works
 
 - **Claude Code**, with Node.js 18 or later and subagents. Tested on Windows 11; the script uses only Node's standard library, so macOS and Linux should work but weren't tested.
-- **Claude chat (claude.ai):** not supported (it needs subagents and Node).
-- **Cowork:** not tested.
+- **Claude chat (claude.ai):** the skill may load there, but it can't run its script or start subagents, so councils don't work in plain chat. Use Claude Code.
+- **Cowork:** not tested. It's expected to work only when the Cowork session runs on your own computer with Node.js 18 or later, since the script needs Node and a council needs subagents. This is expected, not tested.
 
 ## Privacy
 
