@@ -1,6 +1,6 @@
 # Debate brief
 
-In a council with a debate round, each reviewer's seat gets a debate agent with this brief. `{{who}}` is `who-role` for a reviewer with a role, or `who-seat` for a reviewer that reviews everything, where `{{label}}` is the seat's label, such as reviewer 2.
+In a council with a debate round, each reviewer's seat gets a debate agent with this brief. `{{who}}` is `who-role` for a specialised reviewer's seat, or `who-seat` for a generalist's, where `{{label}}` is the seat's label, such as reviewer 2. (A specialised role named exactly `generalist`, in lower case, also gets `who-seat`, with its label, reviewer: generalist.)
 
 `{{what-to-review}}`, `{{rules}}` and `{{format}}` are the texts in `shared.md`, and `{{n}}` is the number of reviewers.
 

@@ -1,8 +1,10 @@
 # Shared brief text
 
-Council Dial's script builds every reviewer, debate, judge, appeal and baseline brief from the templates in this folder, so every run of a council type gets the same wording. Each template is the text in a `text` block under its heading. The script fills in each `{{name}}` from the plan, and leaves everything else exactly as it is written here, including line breaks (it reads Windows line ends as plain ones).
+Every reviewer, debate, judge, appeal and baseline brief in Council Dial is built from the templates in this folder, so every run of a council type gets the same wording. Both editions use these same files: in Council Dial, its script fills them in; in Council Dial Lite, Claude does, following its SKILL.md.
 
-The brief version in the review log (2) names this wording. Changing any of these texts changes how runs compare, so it needs a new brief version (`VERSION` in the script) and a new `BRIEF_SHA256` there: the script won't plan a run with texts that don't match it. The notes around the texts, like this one, aren't part of any brief.
+Each template is the text in a `text` block under its heading. Each `{{name}}` is filled in once, from the run's plan, and the text filled in (such as the user's description of what's reviewed) is never read as a template itself. Everything else is used exactly as written here, including line breaks; Windows line ends count as plain ones.
+
+The brief version in each run's log (2) names this wording. Changing any of these texts changes how runs compare, so it needs a new brief version. Council Dial's script also checks the texts against its `BRIEF_SHA256` and won't plan a run with texts that don't match. The notes around the texts, like this one, aren't part of any brief.
 
 This file holds the parts several briefs share: the rules, the report format, the line that says what's reviewed, and each default reviewer role's area.
 

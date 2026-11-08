@@ -1,6 +1,6 @@
 # Judge brief
 
-A judged council's judge gets this brief. `{{reports}}` is `reports`, or `reports-after-debate` in a council with a debate round. `{{severity-rule}}` is the rule below. When the severity counts it's given don't add up, `log` gives the same rule in its own words.
+A judged council's judge gets this brief. `{{reports}}` is `reports`, or `reports-after-debate` in a council with a debate round. `{{severity-rule}}` is the rule below. When a run's logged severity counts don't add up, Council Dial's `log` gives the same rule in its own words.
 
 `{{what-to-review}}` and `{{rules}}` are the texts in `shared.md`, and `{{n}}` is the number of reviewers.
 

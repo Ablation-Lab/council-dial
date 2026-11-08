@@ -47,8 +47,8 @@ test('the saved-report header mentions the judge only for judged runs', () => {
 test('docs: both READMEs open with a plain-English section and a quick start, and the notes limit is documented', () => {
   for (const f of ['README.md', 'plugin/README.md']) {
     const t = fs.readFileSync(path.join(ROOT, f), 'utf8');
-    const heads = t.split('\n').filter(l => l.startsWith('## ')).slice(0, 4);
-    assert.deepEqual(heads, ['## What it is', '## Quick start', '## Overview', '## Install'], f);
+    const heads = t.split('\n').filter(l => l.startsWith('## ')).slice(0, 5);
+    assert.deepEqual(heads, ['## What it is', '## Quick start', '## Overview', '## Two editions', '## Install'], f);
     assert.match(t, /It's a research tool\. It doesn't claim that any setup, including the judge and the appeal, works better than another/, f);
     assert.ok(!/(proven|shown) to (work|be) better/.test(t), `${f}: no claim that a setup is better`);
     assert.match(t, /up to 400 characters each; longer notes are cut/, f);

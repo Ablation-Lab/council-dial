@@ -1,8 +1,8 @@
 # Reviewer brief
 
-Each reviewer on the council gets one of the two briefs below: `brief`, or `brief-sequential` when the reviewers go one at a time. `{{lens}}` is one of the openings after them: an `alone-` one for a reviewer working alone or a `council-` one for a reviewer on a council, with `-role` for a reviewer with a role and `-everything` for one that reviews everything. The `-area` openings are for a role with a default area (the `focus:` texts in `shared.md`), which fills `{{focus}}`.
+Each reviewer on the council gets one of the two briefs below: `brief`, or `brief-sequential` when the reviewers go one at a time. `{{lens}}` is one of the openings after them: an `alone-` one when the council has one reviewer (a baseline reviewer doesn't count) or a `council-` one when it has more, with `-role` for a specialised reviewer and `-everything` for a generalist. A specialised reviewer whose role matches a `focus:` heading in `shared.md`, ignoring case, gets the `-area` opening, and that heading's text fills `{{focus}}`.
 
-`{{what-to-review}}`, `{{rules}}` and `{{format}}` are the texts in `shared.md`. `{{role}}` is the reviewer's role, `{{n}}` the number of reviewers, and `{{k}}` the reviewer's number.
+`{{what-to-review}}`, `{{rules}}` and `{{format}}` are the texts in `shared.md`. `{{role}}` is the reviewer's role as the user wrote it, `{{n}}` the number of reviewers, and `{{k}}` the reviewer's number, counting from 1.
 
 ## brief
 
