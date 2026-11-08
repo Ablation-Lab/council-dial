@@ -217,7 +217,8 @@ liteTest('SKILL.md keeps reports saved by their agents and checked, findings cop
   assert.match(skill, /"edition": "council-dial-lite"/);
   // Run ids need neither the clock nor random characters: the session's date and the next free number.
   assert.match(skill, /Lite never reads the clock or makes up random characters; the run id is `lite-`, today's date as 8 digits, a hyphen and a two-digit number/);
-  assert.match(skill, /The number is one more than the highest number among that date's existing run ids, or `01` if there are none/);
+  assert.match(skill, /The number is one more than the highest number among that date's existing run ids whose part after the date is 2 or 3 digits, or `01` if there are none, with three digits after `99`\. An id whose part after the date is 4 characters, such as `3021` or `a7c2`, doesn't count, even if all 4 are digits\./);
+  assert.match(skill, /A report you compared after every agent you'd started had finished, with no agent started since, counts as read again\./);
   assert.match(skill, /Then try to Read `<Lite folder>\/lite-<date>-<number>\/run\.json` by its exact path: if it exists, take the next number and try again\./);
   assert.match(skill, /never write to a full Council Dial log or run folder/);
   assert.match(skill, /## 6\. Check the summary/);
@@ -290,16 +291,33 @@ liteTest('README explains the two editions, installs only Lite, and states only 
   assert.match(lite, /\(without asking if the rule above covers it; otherwise it asks you again in Manual mode\)/);
   // The prompts, plainly: the template reads (and the two answers), the saves, and why auto mode shows nothing.
   assert.match(lite, /^## Permission prompts$/m);
-  assert.match(lite, /choose \*\*allow reading from this folder during this session\*\*, if you're happy to trust the templates, and you won't be asked again in that session; or\n- choose \*\*Yes\*\* to approve each read on its own\./);
+  // The option's exact wording, as Claude Code showed it in the Lite 1.1.0 run.
+  assert.match(lite, /choose \*\*Yes, allow reading from <Lite's skill folder> during this session\*\*, if you're happy to trust the templates\./);
+  assert.match(lite, /- choose \*\*Yes\*\* to approve each read on its own\./);
+  assert.doesNotMatch(lite, /\*\*allow reading from this folder during this session\*\*/);
+  // A three-step Quick start near the top: the save rule, a council prompt, and the read prompt's answer.
+  const headings = [...lite.matchAll(/^## (.+)$/gm)].map(m => m[1]);
+  assert.deepEqual(headings.slice(0, 3), ['What it is', 'Quick start', 'Two editions']);
+  const quick = lite.slice(lite.indexOf('## Quick start'), lite.indexOf('## Two editions'));
+  assert.equal(quick.match(/^\d\. /gm).length, 3);
+  assert.ok(quick.includes("\n   ```\n   Add the permission rule Edit(/reviews/lite/**) to this project's .claude/settings.local.json, keeping anything already there.\n   ```\n"));
+  assert.match(quick, /Claude Code asks you before Claude writes the file/);
+  assert.match(quick, /Lite itself never changes your settings\./);
+  assert.match(quick, /so it matches only if you started it in the project root/);
+  assert.ok(quick.includes("\n   ```\n   Run a standard Council Dial Lite review council on src/app.js and README.md. The user did not allow running code.\n   ```\n"));
+  assert.match(quick, /Claude shows the plan .* and asks before starting any agents\. Say yes to start\./);
+  assert.match(quick, /in its default \(Manual\) mode/);
+  assert.match(quick, /On the first read prompt, choose \*\*Yes, allow reading from <Lite's skill folder> during this session\*\*, which covers all the template reads in one go, or choose \*\*Yes\*\* to approve each read one at a time\./);
   assert.match(lite, /\*\*Auto mode\*\* decides each step without asking you, so a run in auto mode shows nothing about which steps would ask/);
   assert.match(lite, /Two of the three reviewers replied without saving their reports\. They weren't refused: they never called the Write tool\./);
   assert.match(lite, /`claude -p` and SDK sessions never apply allow rules from `\.claude\/settings\.json`\./);
   // The trial's results, and what wasn't tested.
   assert.match(lite, /^## Tested$/m);
   assert.match(lite, /The headless session waited for all six background agents and finished the run\./);
-  assert.match(lite, /Not tested yet: any of Lite 1\.1\.0's changes \(among them .*?\), an installed copy \(rather than `--plugin-dir`\), Cowork and chat\./);
+  assert.match(lite, /Not tested yet: Lite 1\.1\.0's changes on Sonnet, where the saves were skipped; .*?an installed copy \(rather than `--plugin-dir`\), Cowork and chat\./);
+  assert.match(lite, /This run changed both the save line and the model, and the earlier skipped saves were on Sonnet, so it doesn't yet show that the new save line fixes them\./);
   // A Standard council reads check-brief.md, shared.md, reviewer.md, judge.md and appeal.md.
-  assert.match(lite, /A Standard council should read 5 template files\./);
+  assert.match(lite, /A Standard council reads 5 template files\./);
   assert.match(lite, /A session that can't ask, such as `claude -p`, refuses them and the run stops/);
   const skillFront = readLite('skills/council-dial-lite/SKILL.md').match(/^---\n([\s\S]*?)\n---\n/)[1];
   assert.match(skillFront, /^compatibility: .*a shell tool, where the session has one, only to check the Lite folder isn't a link/m);
