@@ -33,12 +33,20 @@ import { fileURLToPath } from 'node:url';
 export const VERSION = 2;
 // Council Dial's own version, recorded with each plan so a run's setup can be rebuilt exactly. Keep it
 // equal to plugin.json (a test checks).
-export const PLUGIN_VERSION = '1.3.1';
+export const PLUGIN_VERSION = '1.3.2';
 const COMMANDS = ['plan', 'estimate', 'log', 'update', 'report', 'setup', 'list', 'compare'];
 // The description of what's reviewed is kept at this length when planned and when read back.
 export const TARGET_MAX = 600;
 // The longest notes a results or recheck row keeps, in characters; log and update warn when they cut them.
 export const NOTES_MAX = 400;
+// Notes are a line of text: anything else is refused when logged, and read back from the log as no
+// notes, so an object is never logged or shown as [object Object].
+function notesOf(v, strict) {
+  if (v == null) return '';
+  if (typeof v === 'string') return clean(v, NOTES_MAX);
+  if (strict) throw new Error('notes must be a line of text (a JSON string)');
+  return '';
+}
 // Anthropic's pricing page: Council Dial gives token counts only, never prices.
 export const PRICING_URL = 'https://claude.com/pricing';
 const REVIEWERS = ['specialised', 'generalist'];
@@ -339,7 +347,7 @@ export function checkResults(r, strict = true) {
     baseline: r.baseline && typeof r.baseline === 'object' ? { findings: int(r.baseline.findings, 'baseline.findings'), confirmed: int(r.baseline.confirmed, 'baseline.confirmed'), alsoFoundByCouncil: int(r.baseline.alsoFoundByCouncil, 'baseline.alsoFoundByCouncil') } : null,
     appeal: checkAppeal(r.appeal),
     agents: checkAgents(r.agents),
-    notes: clean(r.notes, NOTES_MAX),
+    notes: notesOf(r.notes, strict),
   };
   // Minutes come in two labelled measures: wallMinutes (wall time, from the start to when the last
   // agent finished, given by Claude) and criticalPathMinutes (worked out by log from the agents'
@@ -410,9 +418,9 @@ function checkAppeal(a) {
   if (items.length > out.reviewed) throw new Error('appeal.items has more entries than appeal.reviewed');
   return out;
 }
-export function checkUpdate(r) {
+export function checkUpdate(r, strict = true) {
   if (!r || typeof r !== 'object' || Array.isArray(r)) throw new Error('give the recheck results as a JSON object on stdin');
-  const out = { fixesMade: int(r.fixesMade, 'fixesMade'), fixesFailedRecheck: int(r.fixesFailedRecheck, 'fixesFailedRecheck'), regressions: int(r.regressions, 'regressions'), newFindings: int(r.newFindings, 'newFindings'), notes: clean(r.notes, NOTES_MAX) };
+  const out = { fixesMade: int(r.fixesMade, 'fixesMade'), fixesFailedRecheck: int(r.fixesFailedRecheck, 'fixesFailedRecheck'), regressions: int(r.regressions, 'regressions'), newFindings: int(r.newFindings, 'newFindings'), notes: notesOf(r.notes, strict) };
   if (out.fixesFailedRecheck > out.fixesMade) throw new Error('fixesFailedRecheck can\'t be more than fixesMade');
   return out;
 }
@@ -439,7 +447,10 @@ export function readLog(file) {
         if (r.type.reviewers === 'specialised') {
           if (Array.isArray(r.type.roles)) {
             if (r.type.roles.length !== r.type.n || !r.type.roles.every(x => typeof x === 'string')) throw new Error('bad roles');
-            roles = r.type.roles.map(x => clean(x, 60).replace(new RegExp(SHELL_CHARS.source, 'gu'), ''));
+            // A role with a comma is dropped: a rerun's --roles splits on commas, so it would come back
+            // as two roles. The roles then no longer match the reviewer count, so the row is bad.
+            roles = r.type.roles.map(x => clean(x, 60).replace(new RegExp(SHELL_CHARS.source, 'gu'), '')).filter(x => !x.includes(','));
+            if (roles.length !== r.type.n) throw new Error('bad roles');
           } else if (r.type.roles == null && r.type.n === DEFAULT_ROLES.length) roles = DEFAULT_ROLES;
           else throw new Error('bad roles');
         }
@@ -464,7 +475,7 @@ export function readLog(file) {
           // Rows from 1.3.0 have sessionEffort (null when CLAUDE_EFFORT wasn't set); older rows don't.
           effortRecorded: Object.hasOwn(r, 'sessionEffort'), sessionEffort: EFFORT_LEVELS.includes(r.sessionEffort) ? r.sessionEffort : null });
       } else if (r.kind === 'results') rows.push({ kind: 'results', runId: r.runId, time: r.time, results: checkResults(r.results, false) });
-      else if (r.kind === 'update') rows.push({ kind: 'update', runId: r.runId, time: r.time, update: checkUpdate(r.update) });
+      else if (r.kind === 'update') rows.push({ kind: 'update', runId: r.runId, time: r.time, update: checkUpdate(r.update, false) });
       else throw new Error('bad kind');
     } catch { skipped++; }
   }
@@ -702,7 +713,7 @@ export function setupOf(run) {
   const t = run.type, notes = [];
   const def = t.reviewers === 'specialised' && t.roles && t.roles.map(r => r.toLowerCase()).sort().join('|') === [...DEFAULT_ROLES].sort().join('|');
   // Every value is single-quoted, so the command is safe to paste into bash or zsh as it stands: a
-  // model id such as claude-opus-5-5[1m] would otherwise be a glob. No value can contain a quote
+  // model id such as claude-opus-4-6[1m] would otherwise be a glob. No value can contain a quote
   // (roles and model ids are checked for that when planned and when read).
   const q = v => `'${v}'`;
   const args = ['plan', '--reviewers', q(t.reviewers), '--combine', q(t.combine)];

@@ -4,14 +4,14 @@
 
 Council Dial is a Claude Code plugin that has a small panel of Claude reviewers check your code, docs or plan. In its standard setup, three reviewers each check the work on their own, a judge checks every finding they report and throws out the ones that don't hold up, and an appeal agent rechecks anything the judge threw out. You make the final call on what to keep.
 
-It's for people who already review work with Claude Code and want to know which way of reviewing works best for their kind of work: for example, whether specialised reviewers find more than generalists, or whether a judge is worth the extra tokens. Every run's setup and what it found go into a log in your project, so over time you can compare setups on your own material.
+It's for people who already review work with Claude Code and want to know which way of reviewing works best for their kind of work: for example, whether specialised reviewers find more than generalists, or whether a debate round is worth the extra tokens. Every run's setup and what it found go into a log in your project, so over time you can compare setups on your own material.
 
 It's a research tool. It doesn't claim that any setup, including the judge and the appeal, works better than another; the log is there so you can measure that on your own work.
 
 ## Quick start
 
 1. In Claude Code, run `/plugin install council-dial --marketplace Ablation-Lab/council-dial` (details and older versions under [Install](#install)). It needs Node.js 18 or later.
-2. In your project, say `Run a standard review council on the diff of this branch`. Claude says how many subagents it will start and roughly how many tokens it will use, and waits for your yes.
+2. In your project, say `Run a standard review council on the diff of this branch`. Claude says how many subagents it will start. Once you have logged runs of that type, it also gives a rough token estimate from them; until then it has none, and suggests a smaller trial run first. Either way, it waits for your yes.
 3. Read the findings, most serious first. If the appeal thinks the judge wrongly threw something out, Claude shows you both views and you decide.
 4. After a few runs, ask `How do the council types compare in my review log?`
 
@@ -95,7 +95,7 @@ Our first two real runs on the sample, scored against the expected findings with
 
 What the log records, and what Claude Code doesn't make available:
 
-- **Main session's model:** recorded as the model id Claude gives the script with `--main-model` (Claude reads it from its own instructions; Claude Code sets no environment variable for it, though it does give the id to a status-line script in its JSON input and sometimes to `SessionStart` hooks). Only an id shaped like a Claude model id (`claude-…`, optionally ending in `[1m]`) is accepted, and only such an id, or an alias, is read back from the log; anything else is refused when planning and dropped when reading, so a value planted in a log can't reach a type's name or the rerun command.
+- **Main session's model:** recorded as the model id Claude gives the script with `--main-model` (Claude reads it from its own instructions; Claude Code sets no environment variable for it, though it does give the id to a status-line script in its JSON input and sometimes to `SessionStart` hooks). Only an id shaped like a Claude model id (`claude-…`, optionally ending in `[1m]`, the suffix an older model such as `claude-opus-4-6[1m]` takes for its 1M-context window; Claude 5 models have that window without it) is accepted, and only such an id, or an alias, is read back from the log; anything else is refused when planning and dropped when reading, so a value planted in a log can't reach a type's name or the rerun command.
 - **Subagents' model:** recorded as asked for. Claude passes your choice as the Agent tool's `model` on every call (the tool takes only the aliases `sonnet`, `opus`, `haiku` and `fable`), or passes none, and the subagents inherit the session's model. The script also records `CLAUDE_CODE_SUBAGENT_MODEL` (a default below your choice) and warns when `CLAUDE_CODE_SUBAGENT_MODEL_FORCE` overrides it. **Not available:** the model a subagent actually ran on. Claude Code shows it in `/tasks`, but doesn't report it to the main session, so the log can't confirm it, and an alias isn't resolved to a version.
 - **Effort:** recorded as the session's effort level, read from the `CLAUDE_EFFORT` environment variable when Claude plans the run, and shown by `setup`. It isn't part of the type's name yet, so runs at different effort levels are compared together. Council Dial doesn't set effort. Two variable names are easy to confuse: to set the level, use `CLAUDE_CODE_EFFORT_LEVEL` (or `/effort`); Claude Code then shows the current level in `CLAUDE_EFFORT`, which is the one Council Dial reads. What we measured on Claude Code 2.1.319 with no effort set for any seat, each result checked three ways (the subagent's own echo of `CLAUDE_EFFORT`, a `SubagentStop` hook logging `effort.level`, and the subagent's transcript):
   - Seats on the session's model (no `--model`, or `--model` naming the same model) ran at the session's effort level.
@@ -180,7 +180,7 @@ None of this is in Council Dial yet, and whether it's built depends on what the 
 - **"no planned run":** the run id is wrong, or the log is in another folder; run `list`, or pass the same `--log-dir` as when it was planned.
 - **"findingsPerReviewer has N numbers":** give one number per reviewer in the plan's order.
 - **"has no results logged yet":** log the run's results before adding a recheck.
-- **"--main-model is the main session's model id":** the script takes only an id as Claude Code names it on Anthropic's API, starting `claude-` (such as `claude-opus-5-5`, or `claude-opus-5-5[1m]`). A Bedrock id (such as `us.anthropic.claude-opus-5-5-v1:0`) or a Vertex id (such as `claude-opus-5-5@20261001`) isn't accepted, so Claude leaves `--main-model` out, plans the run without recording the main model, and tells you so.
+- **"--main-model is the main session's model id":** the script takes only an id as Claude Code names it on Anthropic's API, starting `claude-` (such as `claude-opus-5-5`, or `claude-opus-4-6[1m]` for an older model's 1M-context version). A Bedrock id (such as `us.anthropic.claude-opus-5-5-v1:0`) or a Vertex id (such as `claude-opus-5-5@20261001`) isn't accepted, so Claude leaves `--main-model` out, plans the run without recording the main model, and tells you so.
 - **"node" isn't found:** install Node.js 18 or later.
 
 ## Support
