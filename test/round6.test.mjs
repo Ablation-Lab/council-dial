@@ -189,7 +189,7 @@ test('estimate: no history for the type, so no figure and a smaller trial run su
   assert.match(text, /no estimate for it\. Suggest a smaller trial run first: a Quick council \(3 generalist reviewers, pooled\), or this council on one part of the material/);
   assert.match(text, /every reviewer reads all of it/);
   assert.match(text, /runs only if the judge throws a finding out/);
-  assert.ok(!/https?:\/\//.test(text) && !('pricing' in e), 'no link or pricing field in the output; SKILL.md gives Claude the pricing link');
+  assert.ok(!/https?:\/\//.test(text) && !('pricing' in e), 'no link or pricing field in the output; SKILL.md points users to the pricing page');
   assert.ok(!/\$|USD|dollar|price per/i.test(text.replace('no prices', '')), 'tokens only, no money figures');
   assert.ok(!fs.existsSync(path.join(p, 'reviews')), 'estimate creates nothing');
   const q = run(p, ['estimate', ...QUICK.slice(1)]);
