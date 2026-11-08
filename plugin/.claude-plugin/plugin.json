@@ -1,7 +1,7 @@
 {
   "name": "council-dial",
   "displayName": "Council Dial",
-  "version": "1.5.1",
+  "version": "1.5.2",
   "description": "Runs a review council of Claude subagents the way you choose, and logs which way it ran: specialised or generalist reviewers; judged (with an appeal of the judge's dismissals), pooled or consensus combining; optional debate and sequential rounds; and an optional single-reviewer baseline to compare against. A local script turns your choices into the reviewer and judge briefs, then records each run's type and results (findings, kept and dismissed, fixes that later failed) in a review log in your project, and compares the types over time. Runs in Claude Code with Node.js; the script writes only the review log and the agents' saved reports in your project, and makes no network requests.",
   "author": {
     "name": "Ablation Lab"

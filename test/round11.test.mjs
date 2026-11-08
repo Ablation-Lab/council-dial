@@ -214,7 +214,7 @@ liteTest('SKILL.md keeps reports saved by their agents and checked, findings cop
   // What the headless trial showed SKILL.md needed to say.
   assert.match(skill, /Before you start a council, tell the user/);
   assert.match(skill, /A notice can show `<`, `>` and `&` as `&lt;`, `&gt;` and `&amp;`: read them as the characters they stand for/);
-  assert.match(skill, /For the judge, a finding in its final ranked list of REAL and OVERSTATED findings is cited by its number in that list/);
+  assert.match(skill, /For the judge, a finding in its final ranked list \(its REAL and OVERSTATED findings in brief version 2; every finding it didn't rule NOT REAL in version 3\) is cited by the number that list gives it/);
   assert.doesNotMatch(skill, /judge\/M\d|the judge's M1/);
   assert.match(skill, /write `None\.` under any that has no findings/);
   assert.match(skill, /`wallMinutes`: always `null`\. Lite doesn't read the clock/);
@@ -337,7 +337,8 @@ liteTest('Lite 1.3.0 builds brief version 3 by default, keeps version 2, enforce
   assert.equal(json.runningCode, 'not allowed');
   const readme = readLite('README.md');
   assert.match(readme, /\*\*Brief version 3 by default\.\*\*/);
-  assert.match(readme, /\*\*Nothing runs unless you allow it\.\*\* Each agent is the plugin's read-only agent, `council-dial-lite:council-reader`/);
+  assert.match(readme, /\*\*Nothing runs unless you allow it\.\*\* In brief version 3, each agent is the plugin's read-only agent, `council-dial-lite:council-reader`/);
+  assert.match(readme, /Brief version 2 runs always use general-purpose agents, as they did before, so there the rule is only in the briefs\./);
 });
 
 liteTest('the manifest names it the lighter edition, links the full one plainly, and matches its own marketplace', () => {
@@ -380,7 +381,8 @@ liteTest('README explains the two editions, installs only Lite, and states only 
   assert.doesNotMatch(lite, /Ablation-Lab\/council-dial#install/);
   // What it runs is disclosed: the shell only for the link check, and the material's code only if allowed.
   assert.match(lite, /Claude lists the Lite folder and the folders above it with your session's shell tool, to check none is a link, and uses the shell for nothing else/);
-  assert.match(lite, /They run code from the material only if you say they may/);
+  assert.match(lite, /If you allow running code, and in every version 2 run, they're ordinary general-purpose subagents with the tools your session allows/);
+  assert.doesNotMatch(lite, /They run code from the material only if you say they may/);
   assert.match(lite, /asks you to confirm adding it; then it opens the plugin's page/);
   assert.match(lite, /If you deny a write's prompt, that report isn't saved, and Claude says so\./);
   // The prompts, plainly: the template reads (and the two answers), the saves, and why auto mode shows nothing.
@@ -398,7 +400,8 @@ liteTest('README explains the two editions, installs only Lite, and states only 
   assert.match(quick, /Claude Code asks you before Claude writes the file/);
   assert.match(quick, /Lite itself never changes your settings\./);
   assert.match(quick, /so it matches only if you started it in the project root/);
-  assert.ok(quick.includes("\n   ```\n   Run a standard Council Dial Lite review council on src/app.js and README.md. The user did not allow running code.\n   ```\n"));
+  assert.ok(quick.includes("\n   ```\n   Run a standard Council Dial Lite review council on src/app.js and README.md.\n   ```\n"));
+  assert.match(quick, /Claude only lists your files to check they exist; it doesn't read them before it writes the reviewers' briefs\./);
   assert.match(quick, /Claude shows the plan .* and asks before starting any agents\. Say yes to start\./);
   assert.match(quick, /in its default \(Manual\) mode/);
   assert.match(quick, /On the first read prompt, choose \*\*Yes, allow reading from <Lite's skill folder> during this session\*\*, which covers all the template reads in one go, or choose \*\*Yes\*\* to approve each read one at a time\./);
@@ -409,7 +412,7 @@ liteTest('README explains the two editions, installs only Lite, and states only 
   assert.match(lite, /^## Tested$/m);
   assert.match(lite, /The headless session waited for all six background agents and finished the run\./);
   assert.match(lite, /Not tested yet: Lite 1\.1\.0's changes on Sonnet, where the saves were skipped; .*?an installed copy \(rather than `--plugin-dir`\), Cowork and chat\./);
-  assert.match(lite, /This run changed both the save line and the model, and the earlier skipped saves were on Sonnet, so it doesn't yet show that the new save line fixes them\./);
+  assert.match(lite, /This run changed both the save line and the model, and the earlier skipped saves were on Sonnet, so it didn't show whether the new save line fixed them\. Lite 1\.4\.0 has since removed the agents' saves altogether\./);
   // A Standard council reads check-brief.md, shared.md, reviewer.md, judge.md and appeal.md.
   assert.match(lite, /A Standard council reads 5 template files\./);
   assert.match(lite, /A session that can't ask, such as `claude -p`, refuses them and the run stops/);
@@ -430,12 +433,15 @@ liteTest('README explains the two editions, installs only Lite, and states only 
   assert.match(lite, /The rule lets anything in the session that can write, Claude itself and, if you allowed running code, the general-purpose agents, write anywhere under `reviews\/lite\/`, earlier runs included\. The read-only agents can't write at all\./);
   // Lite 1.4.0: the agents can't write, Claude saves the reports, and dontAsk mode keeps Claude's own writes to the Lite folder.
   assert.match(lite, /^## Why the agents can't write \(Lite 1\.4\.0\)$/m);
-  assert.match(lite, /From 1\.4\.0 the agents only read: Claude, the main session, saves each agent's reply itself, with its Write tool, and only into the run's folder under `reviews\/lite\/`\./);
+  assert.match(lite, /From 1\.4\.0 no agent saves anything: Claude, the main session, saves each agent's reply itself, with its Write tool, and only into the run's folder under `reviews\/lite\/`\./);
+  // The tool limit is version 3's only; version 2 agents are general-purpose and still have the Write tool.
+  assert.match(lite, /Claude saving every report applies to both brief versions; the tool limit applies to version 3 only\. Version 2 agents are general-purpose, as before: they're told not to write or change any file, but they still have the Write tool\./);
+  assert.doesNotMatch(lite, /This applies to both brief versions\./);
   assert.match(lite, /the agents read material that may contain instructions, and an agent that can write can be told to change files, whatever its brief says/);
   assert.match(lite, /\*\*Only the Lite folder, and nothing else \(strictest\):\*\* with the rule above, start Claude Code with `claude --permission-mode dontAsk`\./);
   assert.match(lite, /We tested this in a scratch project: a read and a write under `reviews\/lite\/` went through, and a write to another file was denied\./);
   assert.match(lite, /rules are checked deny first, and an allow rule can't carve an exception out of a deny rule\. An agent definition can't either: its `tools` field limits which tools an agent has, not where they write\./);
-  assert.match(lite, /\| Reports \| saved by Claude through the script \| saved by Claude, from each agent's reply; the agents can't write \|/);
+  assert.match(lite, /\| Reports \| saved by Claude through the script \| saved by Claude, from each agent's reply; in brief version 3 the agents can't write \|/);
   assert.doesNotMatch(lite, /Each agent saves its own report|saved by each agent itself|Read, Grep, Glob and Write/);
   // The version 2 vs version 3 section, standalone.
   assert.match(lite, /^## Version 2 vs version 3$/m);
@@ -476,7 +482,8 @@ test('this repository holds no copy of Lite, lists only the full edition, and po
     assert.match(s, /`\/plugin install council-dial-lite --marketplace Ablation-Lab\/council-dial-lite`/);
     assert.doesNotMatch(s, /council-dial\/(blob|tree)\/[^/\s]+\/lite\b|\]\(\.?\/lite\/|council-dial-lite@council-dial\b|--marketplace Ablation-Lab\/council-dial`, or `council-dial-lite/);
     assert.match(s, /Use Council Dial for runs you'll report as research\./);
-    assert.match(s, /our submission of the full edition to Anthropic's plugin directory was turned down because of its script/);
+    assert.match(s, /Anthropic's plugin directory asked for changes to the full edition because of its script, and Lite is the edition made for the directory/);
+    assert.doesNotMatch(s, /was turned down because of its script|Lite is the edition we submit there instead/);
     assert.doesNotMatch(s, /can't run its script or start subagents|councils don't work in plain chat/, f);
     assert.match(s, /Anthropic's docs don't say which chat or Cowork sessions have/, f);
   }
