@@ -7,7 +7,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { runCommand, parseArgs, buildPlan, readLog, runsFrom, compare, criticalPathOf, councilType, checkResults, TARGET_MAX, PRICING_URL } from '../plugin/skills/council-dial/scripts/council.mjs';
+import { runCommand, parseArgs, buildPlan, readLog, runsFrom, compare, criticalPathOf, councilType, checkResults, TARGET_MAX } from '../plugin/skills/council-dial/scripts/council.mjs';
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url));
 const SCRIPT = path.join(ROOT, 'plugin/skills/council-dial/scripts/council.mjs');
@@ -189,7 +189,7 @@ test('estimate: no history for the type, so no figure and a smaller trial run su
   assert.match(text, /no estimate for it\. Suggest a smaller trial run first: a Quick council \(3 generalist reviewers, pooled\), or this council on one part of the material/);
   assert.match(text, /every reviewer reads all of it/);
   assert.match(text, /runs only if the judge throws a finding out/);
-  assert.ok(text.includes(PRICING_URL) && e.pricing === PRICING_URL);
+  assert.ok(!/https?:\/\//.test(text) && !('pricing' in e), 'no link or pricing field in the output; SKILL.md gives Claude the pricing link');
   assert.ok(!/\$|USD|dollar|price per/i.test(text.replace('no prices', '')), 'tokens only, no money figures');
   assert.ok(!fs.existsSync(path.join(p, 'reviews')), 'estimate creates nothing');
   const q = run(p, ['estimate', ...QUICK.slice(1)]);
@@ -271,7 +271,7 @@ test('docs: the README says what keeps the answer key from the reviewers, and bo
     const t = fs.readFileSync(path.join(ROOT, f), 'utf8');
     assert.ok(!/can't read them|so a council can't read them/.test(t), `${f}: no claim that the location alone hides the key`);
     assert.match(t, /can read any file/, f);
-    assert.ok(t.includes(PRICING_URL), f);
+    assert.ok(t.includes('https://claude.com/pricing'), f);
     assert.match(t, /estimate/, f);
     assert.match(t, /kept share isn't comparable across combine methods.*scores higher by construction.*answer key/, f);
     // The sign-off comes once, as the last line, and every section heading has a blank line before it.

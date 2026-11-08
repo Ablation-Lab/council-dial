@@ -32,8 +32,8 @@ import { fileURLToPath } from 'node:url';
 // judged councils have an appeal step.
 export const VERSION = 2;
 // Council Dial's own version, recorded with each plan so a run's setup can be rebuilt exactly. Keep it
-// equal to plugin.json (a test checks).
-export const PLUGIN_VERSION = '1.3.4';
+// equal to the plugin manifest's version (a test checks).
+export const PLUGIN_VERSION = '1.3.5';
 const COMMANDS = ['plan', 'estimate', 'log', 'update', 'report', 'setup', 'list', 'compare'];
 // The description of what's reviewed is kept at this length when planned and when read back.
 export const TARGET_MAX = 600;
@@ -47,8 +47,6 @@ function notesOf(v, strict) {
   if (strict) throw new Error('notes must be a line of text (a JSON string)');
   return '';
 }
-// Anthropic's pricing page: Council Dial gives token counts only, never prices.
-export const PRICING_URL = 'https://claude.com/pricing';
 const REVIEWERS = ['specialised', 'generalist'];
 const COMBINE = ['judged', 'pooled', 'consensus'];
 export const DEFAULT_ROLES = ['correctness', 'security and privacy', 'docs and policy accuracy'];
@@ -573,11 +571,11 @@ export function estimateOf(runs, type, label) {
   notes.push('Bigger material costs more: every reviewer reads all of it (and debate agents and the judge also read every report), so material larger than those runs reviewed (see basedOn) uses more tokens than this.');
   if (counted.length) notes.push(`If the material looks large, suggest ${trial}.`);
   if (type.appeal) notes.push(`${agentCount} agents counts the appeal agent, which runs only if the judge throws a finding out.`);
-  notes.push(`These are tokens as Claude Code reported them for each subagent (it doesn't say whether cached tokens are included). Council Dial gives no prices; see ${PRICING_URL}.`);
+  notes.push(`These are tokens as Claude Code reported them for each subagent (it doesn't say whether cached tokens are included). Council Dial gives no prices.`);
   return {
     label, agentCount, tokens, loggedRuns: logged.length, trialSuggested: !counted.length,
     basedOn: counted.slice(-5).map(({ r, tokens: t }) => ({ runId: r.runId, date: r.time.slice(0, 10), target: clean(r.target, 120), tokens: t })),
-    notes, pricing: PRICING_URL,
+    notes,
   };
 }
 
