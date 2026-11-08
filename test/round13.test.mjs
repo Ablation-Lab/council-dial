@@ -114,7 +114,7 @@ test('an exclusion in the target line reaches every brief', () => {
   for (const a of plan.steps.flatMap(s => s.agents).filter(a => a.role !== 'appeal')) assert.ok(a.brief.includes('not the shelves/ folder (sample data)'), a.label);
   const s = read('plugin/skills/council-dial/SKILL.md');
   assert.match(s, /If anything next to it is out of scope, such as a folder of sample data, say so in the same line, such as `shelfkeep\.py, scripts\/tidy\.sh and README\.md; not the shelves\/ folder \(sample data\)`: this line is the only description of the target every brief gets, so an exclusion you only tell the user doesn't reach the agents\./);
-  assert.match(s, /then where the material is \(its paths, and anything out of scope exactly as the target line says\)/);
+  assert.match(s, /then where the material is \(its paths, anything out of scope exactly as the target line says, and that the review log folder, `reviews\/` or the one you passed with `--log-dir`, isn't part of the material\)/);
 });
 
 // 4. Nothing added to prompts; deviations logged with their exact text.
@@ -213,7 +213,7 @@ test('log records each seat\'s effort, refuses a made-up one, and reads back onl
 test('the READMEs and SKILL.md describe effort per seat, the troubleshooting entries, and what the log now holds', () => {
   for (const f of ['README.md', 'plugin/README.md']) {
     const s = read(f);
-    assert.match(s, /\*\*Per seat:\*\* `log` records each seat's effort: the level Claude passed to the Agent tool for it \(only if you asked for one\), or `not overridden \(session: <level>\)`/, f);
+    assert.match(s, /\*\*Per seat:\*\* `log` records each seat's effort: the level asked for it, or `not overridden \(session: <level>\)`/, f);
     assert.match(s, /\*\*"unexpected EOF while looking for matching" or a garbled report:\*\* the text was put in the command with a heredoc or quotes\. Write it to a file and pass `--input <file>`/, f);
     assert.match(s, /save it again with `--notice-escaped --replace`/, f);
     assert.match(s, /any file Claude gives it with `--input`/, f);
@@ -221,5 +221,5 @@ test('the READMEs and SKILL.md describe effort per seat, the troubleshooting ent
     assert.match(s, /Anything you want left out, such as a folder of sample data, goes in the one-line description of the target/, f);
     assert.match(s, /every finding whose severity the judge set differently from a reviewer's, up or down/, f);
   }
-  assert.match(read('plugin/skills/council-dial/SKILL.md'), /`effort` only if you passed one to the Agent tool \(otherwise leave it `null`: `log` records the seat as `not overridden \(session: <level>\)`/);
+  assert.match(read('plugin/skills/council-dial/SKILL.md'), /`model` and `effort` as you passed them, which the template already gives from the plan \(`inherit` and `null` where you passed none; `log` records a seat with no effort as `not overridden \(session: <level>\)`/);
 });

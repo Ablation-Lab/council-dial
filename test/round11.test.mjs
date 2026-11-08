@@ -268,6 +268,29 @@ liteTest('Lite 1.1.2 takes on what the appeal stress-test run showed, where it a
   assert.match(readme, /Anything you want left out, such as a folder of sample data, goes in the one-line description of what's reviewed/);
 });
 
+liteTest('Lite 1.2.0 sets a model and an effort per seat with the Agent tool\'s parameters, labels mixed councils by seat, and keeps the blind agents blind', () => {
+  const skill = readLite('skills/council-dial-lite/SKILL.md');
+  assert.match(skill, /- \*\*Seats:\*\* every agent sits in a seat: each reviewer \(named by its role, or `reviewer <k>` for generalists\), the judge, the appeal, the baseline reviewer and the check\. A reviewer's debate turn sits in its reviewer's seat\./);
+  assert.match(skill, /For each seat, its own choice wins, then one for all reviewers \(for a reviewer's seat\), then one for every subagent\. Pass the seat's model as the Agent tool's `model` on its agents' calls/);
+  assert.match(skill, /Pass it as the Agent tool's `effort` parameter, the per-call route Claude Code supports \(2\.1\.292 or later\); leave it out for a seat with none\./);
+  // Lite can't read CLAUDE_CODE_EFFORT_LEVEL (its shell is for the link check only), so it says so and tells the user how to check.
+  assert.match(skill, /Whenever any seat has an effort set, tell the user, before you start any agent, that `CLAUDE_CODE_EFFORT_LEVEL`, if it's set in their shell or in a settings file's `env` block, overrides every seat's effort, and that they can check the shell with `\$env:CLAUDE_CODE_EFFORT_LEVEL` in PowerShell or `echo \$CLAUDE_CODE_EFFORT_LEVEL` in bash/);
+  assert.match(skill, /- \*\*Blind:\*\* models and effort go only in the Agent tool's parameters, never in a prompt; only `run\.json` records them\./);
+  assert.match(skill, /If every seat has the same model and effort: a space, `@` and that, or nothing if it's `inherit` with no effort\. Otherwise: a space, `@\{`, the seats as `<seat>=<model>` joined by `, `, and `\}`\./);
+  assert.match(skill, /`lite: specialised-3\/judged\+appeal @\{reviewers=sonnet, judge=haiku, appeal=opus\/max, check=claude-opus-5-5\}`/);
+  assert.match(skill, /`lite: generalist-3\/pooled @sonnet\/high`/);
+  assert.match(skill, /A run logged before Lite 1\.2\.0 has no `type\.seats`: every seat had the alias the user picked for every subagent \(`models\.requested`\), and no effort\./);
+  assert.match(skill, /then every seat's model and effort, one line per seat, each marked as set for that seat, set for all the reviewers, set for every subagent, or default/);
+  assert.doesNotMatch(skill, /neither you nor Lite sets it/);
+  const json = JSON.parse(skill.match(/\*\*run\.json\.\*\* Write it with this shape[^\n]*\n\n```json\n([\s\S]*?)\n```/)[1]);
+  assert.deepEqual(json.type.seats.map(x => x.seat), ['reviewer: correctness', 'reviewer: security and privacy', 'reviewer: docs and policy accuracy', 'judge', 'appeal', 'check']);
+  assert.ok(json.type.seats.every(x => x.model === null && x.effort === null));
+  assert.ok(Object.hasOwn(json.agents[0], 'model') && Object.hasOwn(json.agents[0], 'effort'));
+  assert.match(readLite('README.md'), /such as Sonnet reviewers, a Haiku judge and an Opus appeal at max effort\. Claude passes them only as the Agent tool's parameters, never in a prompt, so the judge and the appeal can't tell which model or effort produced a finding/);
+  // The check agent's brief, like the shared briefs, never names a model or effort.
+  assert.doesNotMatch(readLite('skills/council-dial-lite/check-brief.md'), /sonnet|haiku|opus|fable|effort/i);
+});
+
 liteTest('the manifest names it the lighter edition, links the full one plainly, and matches its own marketplace', () => {
   const lite = JSON.parse(readLite('.claude-plugin/plugin.json'));
   const full = JSON.parse(read('plugin/.claude-plugin/plugin.json'));

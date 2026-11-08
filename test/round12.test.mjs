@@ -129,6 +129,6 @@ test('both READMEs say it overrides per-seat effort, how to check and clear it, 
 
 test('SKILL.md tells Claude to pass the warning on before any agent starts', () => {
   const s = read('plugin/skills/council-dial/SKILL.md');
-  assert.match(s, /also records `CLAUDE_CODE_EFFORT_LEVEL`, which, when set, overrides every other effort setting, including any effort set for one agent/);
+  assert.match(s, /and `CLAUDE_CODE_EFFORT_LEVEL`, which, when set, overrides every other effort setting, including every seat's\./);
   assert.match(s, /If a warning says `CLAUDE_CODE_EFFORT_LEVEL` is set, tell the user plainly, before you start any agent, that every agent will run at that level whatever effort anyone chose for it; if the user asked for a particular effort for any agent, ask whether to go on\./);
 });

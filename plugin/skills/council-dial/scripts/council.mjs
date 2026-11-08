@@ -36,7 +36,7 @@ import { fileURLToPath } from 'node:url';
 export const VERSION = 2;
 // Council Dial's own version, recorded with each plan so a run's setup can be rebuilt exactly. Keep it
 // equal to the plugin manifest's version (a test checks).
-export const PLUGIN_VERSION = '1.3.9';
+export const PLUGIN_VERSION = '1.4.0';
 const COMMANDS = ['plan', 'estimate', 'log', 'update', 'report', 'setup', 'list', 'compare'];
 // The description of what's reviewed is kept at this length when planned and when read back.
 export const TARGET_MAX = 600;
@@ -69,7 +69,7 @@ const MAX_GROUPS = 50;
 
 export function parseArgs(argv) {
   const [cmd, ...rest] = argv;
-  const o = { cmd, reviewers: null, combine: null, n: null, roles: null, debate: false, sequential: false, baseline: false, noAppeal: false, model: null, mainModel: null, agent: null, replace: false, savedLater: false, noticeEscaped: false, input: null, logDir: 'reviews', project: null, run: null, limit: 10 };
+  const o = { cmd, reviewers: null, combine: null, n: null, roles: null, debate: false, sequential: false, baseline: false, noAppeal: false, model: null, mainModel: null, agent: null, replace: false, savedLater: false, noticeEscaped: false, input: null, effort: null, seatModel: null, seatEffort: null, logDir: 'reviews', project: null, run: null, limit: 10 };
   for (let i = 0; i < rest.length; i++) {
     const a = rest[i];
     const val = () => { const v = rest[++i]; if (v == null || v.startsWith('--')) throw new Error(`${a} needs a value`); return v; };
@@ -82,6 +82,9 @@ export function parseArgs(argv) {
     else if (a === '--baseline') o.baseline = true;
     else if (a === '--no-appeal') o.noAppeal = true;
     else if (a === '--model') o.model = val();
+    else if (a === '--effort') o.effort = val().trim().toLowerCase();
+    else if (a === '--seat-model') o.seatModel = val();
+    else if (a === '--seat-effort') o.seatEffort = val();
     else if (a === '--main-model') o.mainModel = val();
     else if (a === '--agent') o.agent = val();
     else if (a === '--replace') o.replace = true;
@@ -102,8 +105,9 @@ export function parseArgs(argv) {
     if (o.noAppeal && o.combine !== 'judged') throw new Error('--no-appeal is for judged councils; only they have an appeal step');
     if (o.model != null && !MODEL_ALIASES.includes(o.model)) throw new Error(`--model must be ${MODEL_ALIASES.join(', ')} (the Agent tool takes only these aliases); leave it out to use this session's model`);
     if (o.mainModel != null && !CLAUDE_MODEL_ID.test(o.mainModel)) throw new Error('--main-model is the main session\'s model id, such as claude-opus-5-5 (it starts with claude- and may end in [1m])');
-  } else if (o.n != null || o.roles != null || o.reviewers || o.combine || o.debate || o.sequential || o.baseline || o.noAppeal || o.model != null || o.mainModel != null) {
-    throw new Error(`--n, --roles, --reviewers, --combine, --debate, --sequential, --baseline, --no-appeal, --model and --main-model are for estimate and plan only${cmd === 'list' ? ' (list takes --limit)' : ''}`);
+    if (o.effort != null && !EFFORT_LEVELS.includes(o.effort)) throw new Error(`--effort must be ${EFFORT_LEVELS.join(', ')} (the Agent tool's effort levels); leave it out to leave every seat's effort unset`);
+  } else if (o.n != null || o.roles != null || o.reviewers || o.combine || o.debate || o.sequential || o.baseline || o.noAppeal || o.model != null || o.mainModel != null || o.effort != null || o.seatModel != null || o.seatEffort != null) {
+    throw new Error(`--n, --roles, --reviewers, --combine, --debate, --sequential, --baseline, --no-appeal, --model, --effort, --seat-model, --seat-effort and --main-model are for estimate and plan only${cmd === 'list' ? ' (list takes --limit)' : ''}`);
   }
   if (o.n != null && (!Number.isInteger(o.n) || o.n < 1 || o.n > 9)) throw new Error('--n must be a whole number from 1 to 9');
   // Run ids are written in lower case; one retyped in capitals is the same id.
@@ -266,13 +270,92 @@ function checkReportNames(type) {
   }
 }
 
+// ---- Seats: each reviewer (with its debate turn), the judge, the appeal and the baseline reviewer can
+// have its own model and effort. Claude passes them as the Agent tool's model and effort parameters, the
+// per-call route Claude Code supports (model takes only the aliases; effort needs Claude Code 2.1.292 or
+// later). For each seat, its own --seat-model or --seat-effort entry wins, then a "reviewers" entry for a
+// reviewer seat, then --model or --effort for every seat; without any, the seat is left to the default.
+// Seats are named by their agent's label, so the log and the type's name never depend on how the user
+// typed them.
+export function seatIds(type) {
+  const rev = Array.from({ length: type.n }, (_, i) => (type.reviewers === 'specialised' && type.roles ? `reviewer: ${type.roles[i]}` : `reviewer ${i + 1}`));
+  return [...rev, ...(type.combine === 'judged' ? ['judge'] : []), ...(type.appeal ? ['appeal'] : []), ...(type.baseline ? ['baseline reviewer'] : [])];
+}
+// The seat an agent sits in: a debate turn belongs to its reviewer's seat.
+export const seatOfLabel = label => label.replace(/ \(debate\)$/, '');
+function parseSeatList(raw, type, what, check) {
+  const ids = seatIds(type), out = new Map();
+  let group = null;
+  const parts = String(raw).split(';').map(x => x.trim()).filter(Boolean);
+  if (!parts.length) throw new Error(`${what} needs one or more seat=value entries, separated by semicolons, such as 'reviewers=sonnet; judge=haiku'`);
+  for (const part of parts) {
+    const at = part.lastIndexOf('=');
+    if (at < 1) throw new Error(`${what}: "${clean(part, 60)}" isn't seat=value`);
+    const key = part.slice(0, at).trim().toLowerCase().replace(/\s+/g, ' '), value = check(part.slice(at + 1).trim().toLowerCase(), key);
+    let id = null;
+    if (key === 'reviewers') { if (group != null) throw new Error(`${what} names reviewers twice`); group = value; continue; }
+    if (key === 'judge' || key === 'appeal') id = key;
+    else if (key === 'baseline' || key === 'baseline reviewer') id = 'baseline reviewer';
+    else if (type.reviewers === 'specialised') id = ids.find(x => x.startsWith('reviewer: ') && [x.toLowerCase(), x.slice(10).toLowerCase()].includes(key)) ?? null;
+    else { const m = key.match(/^(?:reviewer )?([1-9])$/); id = m ? `reviewer ${m[1]}` : null; }
+    if (!id || !ids.includes(id)) throw new Error(`${what}: this council has no seat "${clean(key, 60)}"; its seats are reviewers, ${ids.map(x => x.startsWith('reviewer: ') ? x.slice(10) : x === 'baseline reviewer' ? 'baseline' : x).join(', ')}`);
+    if (out.has(id)) throw new Error(`${what} names ${id} twice`);
+    out.set(id, value);
+  }
+  return { out, group };
+}
+// Every seat's model and effort as asked for, with where each came from (shown before the run).
+export function seatsOf(o, type) {
+  const okModel = (v, k) => { if (!MODEL_ALIASES.includes(v)) throw new Error(`--seat-model: the model for ${clean(k, 60)} must be ${MODEL_ALIASES.join(', ')} (the Agent tool takes only these aliases)`); return v; };
+  const okEffort = (v, k) => { if (!EFFORT_LEVELS.includes(v)) throw new Error(`--seat-effort: the effort for ${clean(k, 60)} must be ${EFFORT_LEVELS.join(', ')}`); return v; };
+  const sm = o.seatModel != null ? parseSeatList(o.seatModel, type, '--seat-model', okModel) : { out: new Map(), group: null };
+  const se = o.seatEffort != null ? parseSeatList(o.seatEffort, type, '--seat-effort', okEffort) : { out: new Map(), group: null };
+  const pick = (id, own, group, all, flag) => {
+    if (own.has(id)) return { value: own.get(id), source: `${flag} (this seat)` };
+    if (id.startsWith('reviewer') && id !== 'baseline reviewer' && group != null) return { value: group, source: `${flag} (reviewers)` };
+    if (all != null) return { value: all, source: flag === '--seat-model' ? '--model (every seat)' : '--effort (every seat)' };
+    return { value: null, source: 'default' };
+  };
+  return seatIds(type).map(seat => {
+    const m = pick(seat, sm.out, sm.group, o.model ?? null, '--seat-model'), e = pick(seat, se.out, se.group, o.effort ?? null, '--seat-effort');
+    return { seat, model: m.value, effort: e.value, modelSource: m.source, effortSource: e.source };
+  });
+}
+// The model a seat runs on as far as the plan can tell: CLAUDE_CODE_SUBAGENT_MODEL when forced, else the
+// seat's own, else CLAUDE_CODE_SUBAGENT_MODEL, else the main session's; 'inherit' when none is known.
+const seatRunsOn = (models, seat) => { const m = models || {}, env = m.env && m.env !== 'inherit' ? m.env : null; return (m.force && env ? env : seat.model ?? env ?? m.main) || 'inherit'; };
+// Seats as the log keeps them; rows from before 1.4.0 have none, so every seat had --model, or nothing.
+export const typeSeats = type => type.seats ?? seatIds(type).map(seat => ({ seat, model: type.models?.requested ?? null, effort: null }));
+function modelSuffix(type) {
+  // A row from before 1.4.0 keeps the name it had: its recorded effective model, checked when read.
+  if (!type.seats) return type.models?.effective ? ` @${type.models.effective}` : '';
+  const seats = typeSeats(type);
+  const v = s => `${seatRunsOn(type.models, s)}${s.effort ? `/${s.effort}` : ''}`;
+  const vals = seats.map(v);
+  if (vals.every(x => x === vals[0])) {
+    // One model and effort for every seat: named as before 1.4.0 (@model), with /effort when one was set.
+    if (!type.models && !seats[0].effort) return '';
+    return vals[0] === 'inherit' ? '' : ` @${vals[0]}`;
+  }
+  const rev = seats.filter(s => s.seat.startsWith('reviewer') && s.seat !== 'baseline reviewer'), rest = seats.filter(s => !rev.includes(s));
+  const rv = rev.map(v), parts = [];
+  if (rv.every(x => x === rv[0])) parts.push(`reviewers=${rv[0]}`);
+  else {
+    const named = rev.map(s => [s.seat.startsWith('reviewer: ') ? s.seat.slice(10).toLowerCase() : s.seat, v(s)]);
+    if (type.reviewers === 'specialised') named.sort((a, b) => (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0));
+    parts.push(...named.map(([k, x]) => `${k}=${x}`));
+  }
+  for (const s of rest) parts.push(`${s.seat === 'baseline reviewer' ? 'baseline' : s.seat}=${v(s)}`);
+  return ` @{${parts.join(', ')}}`;
+}
+
 // The type's name, always rebuilt from the type itself (never read back from the log), so every run of
 // the same council gets the same name. Custom roles are marked, in lower case and sorted, so they
 // aren't compared as if they were the default council, and role order or case doesn't split a type.
 export function labelOf(type) {
   const roles = Array.isArray(type.roles) ? type.roles.map(r => r.toLowerCase()).sort() : null;
   const custom = type.reviewers === 'specialised' && roles && roles.join('|') !== [...DEFAULT_ROLES].sort().join('|');
-  return `${type.reviewers}-${type.n}${custom ? ` [${roles.join(', ')}]` : ''}/${type.combine}${type.debate ? '+debate' : ''}${type.sequential ? '+sequential' : ''}${type.appeal ? '+appeal' : ''}${type.models?.effective ? ` @${type.models.effective}` : ''}`;
+  return `${type.reviewers}-${type.n}${custom ? ` [${roles.join(', ')}]` : ''}/${type.combine}${type.debate ? '+debate' : ''}${type.sequential ? '+sequential' : ''}${type.appeal ? '+appeal' : ''}${modelSuffix(type)}`;
 }
 
 // The model the subagents run on, as far as the main session can tell. Claude Code's order: the
@@ -308,7 +391,14 @@ export function councilType(o, env = {}) {
   const { models, warnings: modelWarnings } = resolveModels(o, env);
   const type = { reviewers: o.reviewers, n, roles, combine: o.combine, debate: o.debate, sequential: o.sequential, baseline: o.baseline, appeal, models };
   checkReportNames(type);
-  return { type, label: labelOf(type), modelWarnings };
+  const seats = seatsOf(o, type);
+  type.effort = o.effort ?? null;
+  type.seats = seats.map(({ seat, model, effort }) => ({ seat, model, effort }));
+  if (models.force && models.env) {
+    const off = seats.filter(x => x.model && x.model !== models.env && x.modelSource !== '--model (every seat)');
+    if (off.length) modelWarnings.push(`CLAUDE_CODE_SUBAGENT_MODEL_FORCE is set, so every subagent runs on ${models.env}, not the model asked for these seats: ${off.map(x => `${x.seat} (${x.model})`).join(', ')}`);
+  }
+  return { type, label: labelOf(type), modelWarnings, seats };
 }
 // The most agents a type can start (its plan), counting the appeal agent whenever the type has one.
 const plannedAgents = type => Object.values(stepCounts(type)).reduce((s, x) => s + x, 0);
@@ -353,11 +443,27 @@ export function effortOverrideOf(env = {}) {
   return { override: raw, warnings: [`CLAUDE_CODE_EFFORT_LEVEL is set to ${raw}, ${OVERRIDE_HOW}: ${effect}. Per-seat effort settings won't apply; to use them, start Claude Code without it (the README says how)`] };
 }
 
+// One line per seat for Claude to show the user before the run: its model and effort, each marked
+// explicit (with the option that set it) or default.
+export function seatSummaryOf(seats, models, sessionEffort, effortOverride) {
+  return seats.map(x => {
+    const model = x.model
+      ? `model ${x.model} (explicit, ${x.modelSource})${models?.force && models.env && models.env !== x.model ? `, but CLAUDE_CODE_SUBAGENT_MODEL_FORCE makes it ${models.env}` : ''}`
+      : `model: default, ${x.runsOn === 'inherit' ? "the session's model" : models?.env && models.env !== 'inherit' ? `${x.runsOn} (from CLAUDE_CODE_SUBAGENT_MODEL)` : `the session's, ${x.runsOn}`}`;
+    const effort = effortOverride
+      ? `effort ${effortOverride} (CLAUDE_CODE_EFFORT_LEVEL overrides ${x.effort ? `the ${x.effort} asked for` : 'every seat'})`
+      : x.effort ? `effort ${x.effort} (explicit, ${x.effortSource})`
+      : `effort: default, ${x.model ? `that model's default if it isn't the session's model, otherwise the session's level (${sessionEffort ?? 'not recorded'})` : `the session's level (${sessionEffort ?? 'not recorded'})`}`;
+    return `${x.seat}: ${model}; ${effort}`;
+  });
+}
+
 export function buildPlan(o, target, now = new Date(), usedIds = new Set(), env = {}) {
   const t = clean(target, TARGET_MAX);
   if (!t) throw new Error('say what to review on stdin (for example: "the diff of branch fix-parser in this repo: src/parser.mjs and its tests")');
   checkTarget(t);
-  const { type: { appeal, roles, n, models }, label, modelWarnings } = councilType(o, env);
+  const { type: ctype, label, modelWarnings, seats } = councilType(o, env);
+  const { appeal, roles, n, models } = ctype;
   const day = `${now.getUTCFullYear()}${String(now.getUTCMonth() + 1).padStart(2, '0')}${String(now.getUTCDate()).padStart(2, '0')}`;
   let runId = null;
   for (let tries = 0; tries < 200 && runId == null; tries++) { const id = `${day}-${crypto.randomBytes(2).toString('hex')}`; if (!usedIds.has(id)) runId = id; }
@@ -380,13 +486,22 @@ export function buildPlan(o, target, now = new Date(), usedIds = new Set(), env 
   const { override: effortOverride, warnings: overrideWarnings } = effortOverrideOf(env);
   warnings.push(...overrideWarnings);
   const agentCount = steps.reduce((s, x) => s + x.agents.length, 0);
+  // Each agent gets its seat's model and effort, for Claude to pass as the Agent tool's parameters
+  // (null: leave the parameter out). They never go into a brief, so the judge and the appeal can't tell
+  // which model or effort produced a report.
+  const seatOf = l => seats.find(x => x.seat === seatOfLabel(l));
+  for (const st of steps) for (const a of st.agents) { const x = seatOf(a.label); a.model = x.model; a.effort = x.effort; }
+  const explicitEffort = seats.filter(x => x.effort);
+  if (effortOverride && explicitEffort.length) warnings.push(`because CLAUDE_CODE_EFFORT_LEVEL is set, the effort asked for these seats won't apply: ${explicitEffort.map(x => `${x.seat} (${x.effort})`).join(', ')}`);
+  const seatList = seats.map(x => ({ seat: x.seat, model: x.model, modelSource: x.modelSource, runsOn: seatRunsOn(models, x), effort: x.effort, effortSource: x.effortSource }));
   return {
     runId, version: VERSION, label, target: t, sessionEffort, effortOverride,
-    type: { reviewers: o.reviewers, n, roles, combine: o.combine, debate: o.debate, sequential: o.sequential, baseline: o.baseline, appeal, models },
+    seats: seatList, seatSummary: seatSummaryOf(seatList, models, sessionEffort, effortOverride),
+    type: { reviewers: o.reviewers, n, roles, combine: o.combine, debate: o.debate, sequential: o.sequential, baseline: o.baseline, appeal, models, effort: ctype.effort, seats: ctype.seats },
     agentCount, agentModel: o.model ?? null, steps, warnings,
     resultsTemplate: {
       findingsPerReviewer: reviewers.map(() => 0), findingsCombined: 0, confirmed: 0, overstated: 0, dismissed: 0, verified: null, severity: { high: 0, med: 0, low: 0 }, baseline: o.baseline ? { findings: 0, confirmed: 0, alsoFoundByCouncil: 0 } : null, appeal: appeal ? { ran: false, reviewed: 0, items: [] } : null,
-      agents: steps.flatMap(s => s.agents.map(a => ({ label: a.label, step: s.step, model: o.model ?? 'inherit', effort: null, tokens: null, toolUses: null, durationMs: null }))),
+      agents: steps.flatMap(s => s.agents.map(a => ({ label: a.label, step: s.step, model: a.model ?? 'inherit', effort: a.effort, tokens: null, toolUses: null, durationMs: null }))),
       severityChanges: o.combine === 'judged' ? [] : null, deviations: [], wallMinutes: null, notes: '',
     },
   };
@@ -617,6 +732,20 @@ export function readLog(file) {
           if (eff && [models.requested, models.env, models.main].includes(eff)) models.effective = eff;
         }
         const type = { reviewers: r.type.reviewers, n: r.type.n, combine: r.type.combine, debate: !!r.type.debate, sequential: !!r.type.sequential, baseline: !!r.type.baseline, appeal: r.type.combine === 'judged' && r.type.appeal === true, roles, models };
+        // Rows from 1.4.0 record every seat's model and effort as asked for. Each must be this type's
+        // seat, in order, with an alias or null and an effort level or null; otherwise the row is bad,
+        // so a planted row can't give a run a name it didn't have.
+        if (r.type.seats != null) {
+          const ids = seatIds(type);
+          if (!Array.isArray(r.type.seats) || r.type.seats.length !== ids.length) throw new Error('bad seats');
+          type.seats = r.type.seats.map((x, i) => {
+            if (!x || typeof x !== 'object' || typeof x.seat !== 'string' || clean(x.seat, 80).toLowerCase() !== ids[i].toLowerCase()) throw new Error('bad seats');
+            if (x.model != null && !MODEL_ALIASES.includes(x.model)) throw new Error('bad seats');
+            if (x.effort != null && !EFFORT_LEVELS.includes(x.effort)) throw new Error('bad seats');
+            return { seat: ids[i], model: x.model ?? null, effort: x.effort ?? null };
+          });
+          type.effort = EFFORT_LEVELS.includes(r.type.effort) ? r.type.effort : null;
+        }
         // The label is rebuilt from the type, never taken from the line, so a planted or cut label
         // can't rename a run or merge two types.
         rows.push({ kind: 'planned', runId: r.runId, time: r.time, version: Number.isInteger(r.version) ? r.version : 1, councilDial: typeof r.councilDial === 'string' && /^\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(r.councilDial) ? r.councilDial : null, label: labelOf(type), target: clean(r.target, TARGET_MAX), type,
@@ -794,7 +923,7 @@ function markdown(runs) {
     L.push('| Type | Runs | Findings per run | Kept | Dismissed | Kept but severity cut | Minutes per run | Total tokens per run (appeal agent) | Fixes that failed recheck | Regressions per rechecked run | Council kept vs baseline confirmed (per run) | Appeal: dismissals flagged, reinstated | Unverified runs | Planned, not logged |', '|---|---|---|---|---|---|---|---|---|---|---|---|---|---|');
     for (const g of c) L.push(`| ${cell(g.label)} | ${g.runs} | ${dash(g.findingsPerRun)} | ${pct(g.keptPercent)} | ${pct(g.dismissedPercent)} | ${pct(g.overstatedOfKeptPercent)} | ${minCell(g.minutes)} | ${g.tokensPerRun == null ? '-' : `${g.tokensPerRun}${g.appealUsagePerRun != null ? ` (${g.appealUsagePerRun})` : ''}`} | ${pct(g.fixesFailedRecheckPercent)} | ${dash(g.regressionsPerRecheckedRun)} | ${g.baseline ? `${g.baseline.councilKeptPerRun} vs ${g.baseline.baselineConfirmedPerRun} (${runsOf(g.baseline.runs)})` : '-'} | ${g.appeal ? `${g.appeal.flagged} of ${g.appeal.dismissedChecked}, ${g.appeal.reinstated} reinstated${g.appeal.pending ? `, ${g.appeal.pending} pending` : ''}` : '-'} | ${g.unverifiedRuns} | ${g.unfinishedRuns} |`);
     if (c.more) L.push('', `(${c.more} more types not shown.)`);
-    L.push('', 'Kept is the share of combined findings that survived checking, REAL or OVERSTATED (an OVERSTATED finding is a real problem rated too high); dismissed is the share marked NOT REAL. Kept but severity cut is the share of kept findings marked OVERSTATED, which shows how far the reviewers\' severities had to be corrected. All three count only verified runs. The baseline\'s findings are counted confirmed or not, with no OVERSTATED bucket, so a real baseline finding counts as confirmed even if its severity was too high; its confirmed count is the counterpart of the council\'s kept count.', '', 'Minutes are of two kinds and never averaged together: wall time, from the start to when the last agent finished, and the critical path, worked out from the agents\' reported times (the slowest reviewer, then each later step), which leaves out Claude\'s own time between steps. Both are wall-clock time: an agent\'s reported duration includes any time it spent waiting for you to approve a permission prompt (in Claude Code\'s Manual mode), so neither is pure model time. Minutes logged before Council Dial 1.3.0 are unlabelled, because they could be either; logging the run again labels them.', '', 'Total tokens per run count only runs where every agent the run had is listed with the tokens Claude Code reported for it, and so does the appeal agent\'s figure in brackets. A type ending in @ and a model was run on that model (as asked for; Claude Code doesn\'t report the model a subagent actually ran on to the main session). Small numbers of runs say little; compare types on the same kind of target.', '', 'Where a run\'s reports were saved, they are in the folder named by its run id, next to this file. Finding numbers restart in every run, so cite them with the run id, such as 20261107-2f23/M12.', '');
+    L.push('', 'Kept is the share of combined findings that survived checking, REAL or OVERSTATED (an OVERSTATED finding is a real problem rated too high); dismissed is the share marked NOT REAL. Kept but severity cut is the share of kept findings marked OVERSTATED, which shows how far the reviewers\' severities had to be corrected. All three count only verified runs. The baseline\'s findings are counted confirmed or not, with no OVERSTATED bucket, so a real baseline finding counts as confirmed even if its severity was too high; its confirmed count is the counterpart of the council\'s kept count.', '', 'Minutes are of two kinds and never averaged together: wall time, from the start to when the last agent finished, and the critical path, worked out from the agents\' reported times (the slowest reviewer, then each later step), which leaves out Claude\'s own time between steps. Both are wall-clock time: an agent\'s reported duration includes any time it spent waiting for you to approve a permission prompt (in Claude Code\'s Manual mode), so neither is pure model time. Minutes logged before Council Dial 1.3.0 are unlabelled, because they could be either; logging the run again labels them.', '', 'Total tokens per run count only runs where every agent the run had is listed with the tokens Claude Code reported for it, and so does the appeal agent\'s figure in brackets. A type ending in @ and a model was run on that model (as asked for; Claude Code doesn\'t report the model a subagent actually ran on to the main session); one ending in @{...} gives each seat\'s model, and /low, /high and so on give an effort level that was set for a seat. Small numbers of runs say little; compare types on the same kind of target.', '', 'Where a run\'s reports were saved, they are in the folder named by its run id, next to this file. Finding numbers restart in every run, so cite them with the run id, such as 20261107-2f23/M12.', '');
   }
   return L.join('\n');
 }
@@ -898,7 +1027,11 @@ export function setupOf(run) {
   if (t.sequential) args.push('--sequential');
   if (t.baseline) args.push('--baseline');
   if (t.combine === 'judged' && !t.appeal) args.push('--no-appeal');
-  if (t.models?.requested) args.push('--model', q(t.models.requested));
+  const seats = typeSeats(t);
+  const sameModel = seats.every(x => x.model === seats[0].model), sameEffort = seats.every(x => x.effort === seats[0].effort);
+  const seatArg = k => seats.filter(x => x[k]).map(x => `${x.seat.startsWith('reviewer: ') ? x.seat.slice(10) : x.seat === 'baseline reviewer' ? 'baseline' : x.seat}=${x[k]}`).join('; ');
+  if (sameModel) { if (seats[0].model) args.push('--model', q(seats[0].model)); } else args.push('--seat-model', q(seatArg('model')));
+  if (sameEffort) { if (seats[0].effort) args.push('--effort', q(seats[0].effort)); } else args.push('--seat-effort', q(seatArg('effort')));
   if (t.models?.main) args.push('--main-model', q(t.models.main));
   // Runs planned before 1.2.0 didn't record Council Dial's version; each brief version and model
   // record belongs to one release, so it can be told from them.
@@ -970,6 +1103,8 @@ export function runCommand(o, input, now = new Date(), givenEnv = readEnv()) {
       if (results.findingsPerReviewer.length && results.findingsPerReviewer.length !== run.type.n) throw new Error(`findingsPerReviewer has ${results.findingsPerReviewer.length} numbers; this run had ${run.type.n} reviewers`);
       if (results.baseline && !run.type.baseline) throw new Error('this run was planned without a baseline; leave baseline out');
       if (results.appeal && !run.type.appeal) throw new Error('this run was planned without the appeal step; leave appeal out');
+      // Each seat's model and effort as given here, where they differ from what the plan asked for.
+      const mismatched = [];
       if (results.agents) {
         const max = stepCounts(run.type);
         for (const s of STEPS) { const k = results.agents.filter(a => a.step === s).length; if (k > max[s]) throw new Error(`agents lists ${k} ${s} agents; this run had ${max[s]}`); }
@@ -983,13 +1118,17 @@ export function runCommand(o, input, now = new Date(), givenEnv = readEnv()) {
           if (seen.has(m.label)) throw new Error(`agents lists ${m.label} twice`);
           if (m.step === 'appeal' && results.appeal?.ran !== true) throw new Error('agents lists the appeal agent, but appeal.ran isn\'t true; drop the appeal entry if it didn\'t run, or set appeal.ran');
           seen.add(m.label); a.label = m.label;
+          const st = typeSeats(run.type).find(x => x.seat === seatOfLabel(m.label));
+          if (a.effort == null && st?.effort) a.effort = st.effort;
+          if (st && a.model !== (st.model ?? 'inherit')) mismatched.push(`${m.label} was given model ${a.model}, but the plan asked for ${st.model ?? 'inherit'}`);
+          if (st && EFFORT_LEVELS.includes(a.effort) && a.effort !== st.effort) mismatched.push(`${m.label} was given effort ${a.effort}, but the plan asked for ${st.effort ?? 'none'}`);
           a.effort = seatEffortOf(run, a);
           a.reportUnescaped = reportUnescapedOf(p, run.runId, m.label);
         });
       }
       const { unlabelledMinutes, ...row } = results;
       row.criticalPathMinutes = criticalPathOf(run.type, results);
-      const warning = warnings(append(p, { kind: 'results', runId: o.run, time: now.toISOString(), results: row }), notesCut(raw, `log --run ${o.run} again with shorter notes to replace these results`));
+      const warning = warnings(append(p, { kind: 'results', runId: o.run, time: now.toISOString(), results: row }), notesCut(raw, `log --run ${o.run} again with shorter notes to replace these results`), mismatched.length ? `${mismatched.join('; ')}; the type's name records what the plan asked for, so if you passed something else, say so in deviations` : null);
       return { logged: true, runId: o.run, label: run.label, replaced: !!run.results, verified: results.verified, wallMinutes: row.wallMinutes, criticalPathMinutes: row.criticalPathMinutes, message: `Logged the results of run ${o.run} (${run.label}) in ${p.rel}/review-log.md.`, ...note, ...(warning ? { warning } : {}) };
     }
     case 'update': {
