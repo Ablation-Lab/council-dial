@@ -137,7 +137,7 @@ liteTest('the check brief compares each report\'s own count line with the items 
   const brief = readLite('skills/council-dial-lite/check-brief.md');
   assert.match(brief, /4\. For each report file, check every count it gives of items listed in that same report/);
   assert.match(brief, /List each count that differs as COUNT MISMATCH/);
-  assert.match(brief, /End with a count: findings in the summary, MATCHES, CHANGED, NO SOURCE, LEFT OUT, COUNT MISMATCH, BRIEF MATCHES, BRIEF DIFFERS, BRIEF NOT CHECKED and OVERVIEW UNSUPPORTED \(or "no overview"\)\. Your reply holds the marks, lists and counts these steps ask for, and any instructions you found in the summary, the reports or the overview, and nothing else: no title, headings, notes or comments of your own\./);
+  assert.match(brief, /End with a count: findings in the summary, MATCHES, CHANGED, NO SOURCE, LEFT OUT, COUNT MISMATCH, BRIEF MATCHES, BRIEF DIFFERS, BRIEF NOT CHECKED and OVERVIEW UNSUPPORTED \(or "no overview"\)\. Your reply holds the marks, lists and counts these steps ask for, in that form, and any instructions you found in the summary, the reports or the overview\. After the count, you may add a line NOTES: and at most five short lines of your own/);
   const skill = LITE_SKILL();
   assert.match(skill, /"check": \{"findings": n, "matches": n, "changed": n, "noSource": n, "leftOut": n, "countMismatch": n, "briefsMatch": n, "briefsDiffer": n, "briefsNotChecked": n, "overviewUnsupported": n\}/);
 });

@@ -49,7 +49,7 @@ liteTest('SKILL.md: raw mode is opt-in, drops only the check agent, is labelled 
   assert.match(skill, /- \*\*Raw mode:\*\* only if the user asks for a raw run\./);
   assert.match(skill, /A raw run has one agent fewer than the same type otherwise would \(no check\); say so when you count\. Its label has `\+raw` after the other extras/);
   assert.match(skill, /`\+debate`, `\+sequential`, `\+appeal` and `\+raw` for each one the run has, in that order\. A run logged before Lite 1\.6\.0 has no `type\.raw`, and isn't raw\./);
-  assert.match(skill, /`lite: specialised-3\/judged\+appeal\+raw v3 @claude-opus-5-5 \(Lite 1\.9\.0\)`/);
+  assert.match(skill, /`lite: specialised-3\/judged\+appeal\+raw v3 @claude-opus-5-5 \(Lite 1\.10\.0\)`/);
   assert.match(skill, /\| check \| always, except in a raw run \| `check` \|/);
   assert.match(skill, /Read `\$\{CLAUDE_SKILL_DIR\}\/check-brief\.md` first \(in a raw run, `\$\{CLAUDE_SKILL_DIR\}\/raw-handoff\.md`\), before any file in `briefs\/`\./);
 
@@ -83,7 +83,7 @@ liteTest('README: raw mode says what it saves, skips and costs', () => {
   for (const x of ['**What runs:**', '**What it saves:**', '**What it skips:**', '**Handing it off:**', '**What it costs:**', '**What you lose:**']) assert.ok(raw.includes(x), x);
   assert.match(raw, /a Standard raw run starts 5 agents, not 6/);
   assert.match(raw, /`ANALYSE-THIS-RUN\.txt`, a short instruction file built from a fixed template in the plugin/);
-  assert.match(raw, /In our first three Lite runs, the check was 15% to 20% of the agents' logged tokens; from Lite 1\.8\.0 it also reads the briefs and their templates, so it now costs more than that\./);
+  assert.match(raw, /In our first three Lite runs, the check was 15% to 20% of the agents' logged tokens\. From Lite 1\.8\.0 it also reads the briefs and their templates, and from 1\.9\.0 Claude's overview: in the 1\.9\.0 runs it logged about 39,000 tokens and 12 to 18 tool uses, 20% to 36% more than all three reviewers of the same run together\./);
   assert.match(raw, /Lite never sees the analysis session's tokens/);
   assert.match(raw, /no check agent compares the analyst's summary with the reports/);
   assert.match(raw, /say `Analyse the raw Council Dial Lite run <run id>\.`/);
