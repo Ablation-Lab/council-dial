@@ -148,15 +148,23 @@ What the log records, and what Claude Code doesn't make available:
 
 ## Choosing models per seat
 
-You can set a model for each seat, such as the appeal (see [Models, tokens and time](#models-tokens-and-time)). One early finding bears on that choice. It comes from a single batch, so treat it as a lead, not a guarantee.
+You can set a model for each seat, such as the appeal (see [Models, tokens and time](#models-tokens-and-time)). Some early findings bear on that choice. They come from a single batch, on test material Claude wrote, so treat them as leads, not guarantees.
 
 In a direct test of the appeal, brief version 3's appeal (the same in both editions) was given ready-made judge decisions that mixed wrongful and fair dismissals and severity changes, on test material Claude wrote: 72 trials, on Opus, Sonnet and Haiku 5.5 at medium and low effort.
 
 - **Dismissals:** every model caught nearly every wrongful dismissal: 161 of 162 in all, and at least 26 of 27 for each model at each effort level. So a Haiku appeal looked enough for checking dismissals.
-- **Severity:** wrongful severity changes, nearly all one-step cuts, were caught less often: Opus 37 of 42 (about 88%), Haiku 32 of 42 (about 76%) and Sonnet 25 of 42 (about 60%: 16 of 21 at medium effort, but 9 of 21, 43%, at low).
-- **Caveats:** there were three trials for each model, effort and set. Claude wrote the material, the judge decisions, the answer key and the scoring, and every appeal was a Claude model. Each wrong judge decision could be refuted by reading the material, so the batch says nothing about cases where it can't. Half of the severity misses (16 of 32) were on one item, a MED finding cut to LOW, so the ranking between models leans on it.
+- **Severity:** wrongful severity changes, nearly all one-step cuts, were caught less often than dismissals. These figures use the batch's revised scoring (9 Nov 2026), which accepts one contested finding, R4, at LOW or MED, as two outside raters rated a plain description of it:
+  - Opus caught 36 of 36, Haiku 31 of 36 (about 86%) and Sonnet 25 of 36 (about 69%).
+  - Five of the six model and effort combinations caught 15 to 18 of 18. Sonnet at low effort was the one weak combination, at 9 of 18.
+  - Under the original answer key, which accepted R4 only at MED or HIGH, the figures were Opus 37 of 42, Haiku 32 of 42 and Sonnet 25 of 42.
+- **Wording:** in the same tests, how a finding was worded changed the severity outside raters gave the same bug. With its worst case spelled out, both raters rated R4 critical; with a plain description, one rated it medium and the other low. So judges and appeals may be swayed by how dramatically a finding is written.
+- **Caveats:**
+  - There were three trials for each model, effort and set.
+  - Claude wrote the material, the judge decisions, the answer key and the scoring, and every appeal was a Claude model.
+  - The revised figures rest on two outside raters.
+  - Each wrong judge decision could be refuted by reading the material, so the batch says nothing about cases where it can't.
 
-The batch is written up in the research repository, [evolving-review-councils](https://github.com/Ablation-Lab/evolving-review-councils/blob/main/core-method/experiment-plan.md#appeal-stress-test-first-runs-8-nov-2026), under "Appeal stress test: first runs (8 Nov 2026)". For example, add `with the appeal on Haiku` to a council prompt (Claude plans with `--seat-model 'appeal=haiku'`) for a cheaper appeal when dismissals are what you care about, or `with the appeal on Opus` when severities matter.
+The batch, with its revised headline, is written up in the research repository, [evolving-review-councils](https://github.com/Ablation-Lab/evolving-review-councils/blob/main/core-method/experiment-plan.md#appeal-stress-test-first-runs-8-nov-2026), under "Appeal stress test: first runs (8 Nov 2026)". For example, add `with the appeal on Haiku` to a council prompt (Claude plans with `--seat-model 'appeal=haiku'`) for a cheaper appeal when dismissals are what you care about, or `with the appeal on Opus` when severities matter.
 
 ## Where it works
 

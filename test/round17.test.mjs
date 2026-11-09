@@ -105,12 +105,17 @@ liteTest('README: the three-step Quick start keeps the Edit rule and says why Li
 
 const checkModels = (md, f) => {
   const s = section(md, 'Choosing models per seat');
-  assert.match(s, /It comes from a single batch, so treat it as a lead, not a guarantee\./, f);
+  assert.match(s, /They come from a single batch, on test material Claude wrote, so treat them as leads, not guarantees\./, f);
   assert.match(s, /on test material Claude wrote: 72 trials, on Opus, Sonnet and Haiku 5\.5 at medium and low effort/, f);
   assert.match(s, /161 of 162 in all, and at least 26 of 27 for each model at each effort level\. So a Haiku appeal looked enough for checking dismissals\./, f);
-  assert.match(s, /Opus 37 of 42 \(about 88%\), Haiku 32 of 42 \(about 76%\) and Sonnet 25 of 42 \(about 60%: 16 of 21 at medium effort, but 9 of 21, 43%, at low\)/, f);
+  // The batch report's revised headline (9 Nov 2026): R4 accepted at LOW or MED.
+  assert.match(s, /Opus caught 36 of 36, Haiku 31 of 36 \(about 86%\) and Sonnet 25 of 36 \(about 69%\)\./, f);
+  assert.match(s, /Sonnet at low effort was the one weak combination, at 9 of 18\./, f);
+  assert.match(s, /Under the original answer key, which accepted R4 only at MED or HIGH, the figures were Opus 37 of 42, Haiku 32 of 42 and Sonnet 25 of 42\./, f);
+  assert.match(s, /With its worst case spelled out, both raters rated R4 critical; with a plain description, one rated it medium and the other low\. So judges and appeals may be swayed by how dramatically a finding is written\./, f);
   assert.match(s, /https:\/\/github\.com\/Ablation-Lab\/evolving-review-councils\/blob\/main\/core-method\/experiment-plan\.md#appeal-stress-test-first-runs-8-nov-2026/, f);
-  assert.match(s, /Half of the severity misses \(16 of 32\) were on one item, a MED finding cut to LOW, so the ranking between models leans on it\./, f);
+  assert.match(s, /The revised figures rest on two outside raters\./, f);
+  assert.doesNotMatch(s, /about 88%|about 60%|Half of the severity misses/, f);
   return s;
 };
 
