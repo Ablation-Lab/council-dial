@@ -19,6 +19,7 @@ const tmp = () => { const d = fs.mkdtempSync(path.join(os.tmpdir(), 'council-dia
 after(() => { for (const d of made) fs.rmSync(d, { recursive: true, force: true }); });
 // No managed settings: the settings check reads an empty folder, so these tests don't depend on the machine.
 const NO_MANAGED = fs.mkdtempSync(path.join(os.tmpdir(), 'council-dial-r14-managed-'));
+made.push(NO_MANAGED);
 const run = (p, argv, input = '', env = {}) => runCommand({ ...parseArgs(argv), project: p, managedSettingsDir: NO_MANAGED }, input, new Date(), env);
 const read = f => fs.readFileSync(path.join(ROOT, f), 'utf8');
 const T = 'the diff of branch fix-parser: src/parser.mjs and its tests';
@@ -117,7 +118,7 @@ test('the type\'s name: unchanged for one model and no effort, /effort when set,
   const b = label(['--reviewers', 'specialised', '--roles', 'api, perf', '--combine', 'judged', '--seat-model', 'api=haiku']);
   assert.equal(a, 'specialised-2 [api, perf]/judged+appeal @{api=haiku, perf=inherit, judge=inherit, appeal=inherit}');
   assert.equal(a, b);
-  assert.equal(label(['--reviewers', 'generalist', '--combine', 'judged', '--no-appeal', '--baseline', '--seat-model', '2=haiku', '--main-model', 'claude-opus-5-5']), 'generalist-3/judged @{reviewer 1=claude-opus-5-5, reviewer 2=haiku, reviewer 3=claude-opus-5-5, judge=claude-opus-5-5, baseline=claude-opus-5-5}');
+  assert.equal(label(['--reviewers', 'generalist', '--combine', 'judged', '--no-appeal', '--baseline', '--seat-model', '2=haiku', '--main-model', 'claude-opus-5-5']), 'generalist-3/judged+baseline @{reviewer 1=claude-opus-5-5, reviewer 2=haiku, reviewer 3=claude-opus-5-5, judge=claude-opus-5-5, baseline=claude-opus-5-5}');
 });
 
 test('estimate looks up the same type plan logs, and compare keeps mixed councils apart', () => {
@@ -185,7 +186,7 @@ test('the judge and the appeal are kept blind: no brief or step instruction name
   }
   const s = read('plugin/skills/council-dial/SKILL.md');
   assert.match(s, /Models and effort go only in those parameters: never put them in a prompt, and never tell any agent, the judge and the appeal above all, which model or effort any agent runs on\. Only the log records them\./);
-  assert.match(s, /and that the review log folder, `reviews\/` or the one you passed with `--log-dir`, isn't part of the material/);
+  assert.match(s, /and the line `Open no file under <log folder>: it isn't part of the material\.`/);
   assert.match(s, /Pass each agent's `model` from its entry in `steps` as the Agent tool's `model`, and its `effort` as the Agent tool's `effort`, leaving out either one when it's `null`\./);
   assert.match(s, /Before you start any agent, show the user `seatSummary`, one line per seat with its model and effort, each marked explicit \(and which option set it\) or default;/);
   assert.doesNotMatch(s, /If `agentModel` is set, pass it as the Agent tool's `model` on every call/);

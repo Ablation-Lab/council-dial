@@ -43,7 +43,7 @@ liteTest('read-backs may follow a batch of edits, in full; settings files only f
   const s = LITE_SKILL();
   assert.match(s, /After a change, or after a batch of targeted edits made one after another with no other tool calls in between, read the whole file back once, in full/);
   assert.match(s, /when every seat is on this session's model, don't read them, since no saved level can apply, and that isn't a deviation/);
-  assert.match(s, /only when the material is more than 5 files or names a whole folder, or when it isn't a list of files \(such as a branch's diff\) and you can't tell how many files it covers; for up to 5 named files, say a trial isn't needed\./);
+  assert.match(s, /only when the material is more than 5 files or names a whole folder; for up to 5 named files, say a trial isn't needed\./);
 });
 
 liteTest('the description is paths, exclusions and the user\'s words only; the saved brief is the brief alone', () => {
@@ -97,12 +97,12 @@ liteTest('README: the escaped-reply limit, and the 1.7.0 runs', () => {
   const r = readLite('README.md');
   assert.match(r, /A reply that only looks escaped is still turned back\./);
   assert.match(r, /\*\*Lite 1\.7\.0, interactive, three councils\*\*/);
-  assert.match(r, /The judge merged 24 reviewer findings \(10, 7 and 7\) into 16: 8 REAL, 3 PARTLY REAL, 3 OVERSTATED and 2 NOT REAL\./);
+  assert.match(r, /The judge merged 24 reviewer findings \(10, 7 and 7\) into 16: 8 REAL, 3 PARTLY REAL, 3 OVERSTATED and 2 NOT REAL \(the split is from our run notes, not yet published\)\./);
 });
 
 test('full edition: trial suggestion, description, missing reason line, NOT REAL and split findings, Related to, and the checklist', () => {
   const s = FULL_SKILL();
-  assert.match(s, /only when the material is more than 5 files or names a whole folder, or when it isn't a list of files \(such as a branch's diff\) and you can't tell how many files it covers; for up to 5 named files, say a trial isn't needed\./);
+  assert.match(s, /only when the material is more than 5 files or names a whole folder; for up to 5 named files, say a trial isn't needed\./);
   assert.match(s, /Add no words of your own about what a file is/);
   assert.match(s, /for OVERSTATED or UNDERSTATED, whose brief requires a reason line, the words `the judge gave no reason line`/);
   assert.match(s, /Only findings the judge kept \(any ruling but NOT REAL\) can be severity changes/);

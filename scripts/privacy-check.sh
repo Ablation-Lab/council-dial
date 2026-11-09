@@ -67,6 +67,8 @@ generic=(
   '[a-z]:\\users\\'
   '/c/users/'
   '/home/[a-z0-9_-]+/'
+  '(^|[^a-z0-9])[a-z]:[\\/](projects|scratch)([^a-z0-9]|$)'
+  '(^|[^a-z0-9._#-])/([a-z]|mnt/[a-z])/(projects|scratch)([^a-z0-9]|$)'
   '(^|[^a-z])(gpu|vram|rtx|gtx|nvidia|geforce|radeon|ryzen|threadripper)([^a-z]|$)'
 )
 

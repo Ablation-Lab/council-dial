@@ -133,7 +133,7 @@ test('version 3 agents are the read-only agent unless running code is allowed; v
   const allowed = plan(['--allow-running-code']);
   assert.equal(allowed.runningCode, 'allowed'); assert.equal(allowed.toolLimits, false);
   assert.ok(allowed.steps.flatMap(s => s.agents).every(a => a.agentType === 'general-purpose'));
-  assert.equal(allowed.label, plan().label, 'running code is not part of the type');
+  assert.equal(allowed.label, plan().label.replace(' v3', '+running-code v3'), 'running code allowed is marked in the type');
   const v2 = plan(['--brief-version', '2']);
   assert.equal(v2.toolLimits, false);
   assert.ok(v2.steps.flatMap(s => s.agents).every(a => a.agentType === 'general-purpose'));
@@ -142,7 +142,10 @@ test('version 3 agents are the read-only agent unless running code is allowed; v
   const pl = run(p, ['plan', ...STD, '--allow-running-code'], T);
   const row = JSON.parse(fs.readFileSync(path.join(p, 'reviews/review-log.jsonl'), 'utf8').trim());
   assert.equal(row.runningCode, 'allowed'); assert.equal(row.toolLimits, false);
-  assert.match(run(p, ['setup', '--run', pl.runId]).rerun, /--allow-running-code/);
+  // setup never carries permission to run code over to a rerun; it says the user must give it again.
+  const s = run(p, ['setup', '--run', pl.runId]);
+  assert.doesNotMatch(s.rerun, /--allow-running-code/);
+  assert.ok(s.notes.some(n => /allowed running code/.test(n) && /says again, for this run/.test(n)));
 });
 
 test('the plugin ships the read-only agent with only Read, Grep and Glob', () => {
@@ -287,20 +290,21 @@ test('SKILL.md: brief versions, the read-only agent and its fallback, the severi
   assert.match(s, /also list every severity verdict it gave, each with the judge's and the appeal's severity; for each one marked TOO LOW, TOO HIGH or UNSURE, show both views and ask the user to call it/);
   assert.match(s, /also `partlyReal` and `understated`, the judge's PARTLY REAL and UNDERSTATED, and then all five add up to it/);
   assert.match(s, /`severityItems`, one for every one of them, fair ones included/);
-  assert.match(s, /`plan` reads the user's own settings file only with `--read-effort-settings`; without it, a warning says user settings weren't checked\. Pass that option only if the user asks\./);
+  assert.match(s, /`plan` reads the user's own settings file only with `--read-effort-settings`; without it, when a seat's effort depends on them, a warning says user settings weren't checked\. Pass that option only if the user asks\./);
 });
 
 test('both READMEs explain the tool limits and why they are the default, brief version 3, and the effort settings check', () => {
   for (const f of ['README.md', 'plugin/README.md']) {
     const r = read(f);
-    assert.match(r, /every one of them is the plugin's read-only agent, `council-dial:council-reader` \(in `plugin\/agents\/`\), which has only the Read, Grep and Glob tools/, f);
+    assert.match(r, /every one of them is the plugin's read-only agent, `council-dial:council-reader` \(in `(plugin\/)?agents\/`\), which has only the Read, Grep and Glob tools/, f);
+    assert.ok(r.includes(f === 'README.md' ? '(in `plugin/agents/`)' : '(in `agents/`)'), `${f}: the agent's folder from where that README sits`);
     assert.match(r, /a rule in a brief is only an instruction, and in one of our runs a judge ran a "scratch" Python check it read as allowed; a tool limit can't be talked around\. This is the default because/, f);
     assert.match(r, /Claude Code's sub-agents docs give an agent definition's `tools` field as the way to limit a subagent's tools \(the Agent call itself can't\)/, f);
     assert.match(r, /Claude plans with `--allow-running-code`, the agents are ordinary general-purpose subagents/, f);
     assert.match(r, /\*\*The judge can raise a severity, and the appeal checks severities \(brief version 3\)\.\*\*/, f);
     assert.match(r, /Brief version 2 stays selectable with `--brief-version 2`, and its runs are compared apart from version 3's\./, f);
     assert.match(r, /\*\*Saved levels:\*\* a seat with no effort set, on another model than the session's, runs at the level saved for that model in your settings/, f);
-    assert.match(r, /Without `--read-effort-settings`, the plan says plainly that user settings weren't checked and that a level saved there may apply\./, f);
+    assert.match(r, /Without `--read-effort-settings`, when a seat's effort depends on them, the plan says plainly that user settings weren't checked and that a level saved there may apply\./, f);
     assert.match(r, /five environment variables, each by name: `CLAUDE_CONFIG_DIR`, only to find your user settings folder when you allow reading it/, f);
     assert.doesNotMatch(r, /An appeal on severity downgrades\./, f);
   }
@@ -315,7 +319,7 @@ test('both READMEs describe every difference between version 2 and version 3, an
     assert.ok(sec.length > 2000, f);
     for (const x of [
       'REAL (the claim holds, same severity), PARTLY REAL (part of the claim doesn\'t hold, same severity), OVERSTATED (lower), UNDERSTATED (higher, so a severity can be raised) and NOT REAL',
-      'one finding, silent data loss, ended LOW, MED or HIGH depending only on whether one reviewer happened to rate it high',
+      'in three runs, one finding, silent data loss, ended LOW, MED and HIGH, each time the highest rating a single reviewer gave it',
       'From the evidence, "not from how many reviewers raised it or how they rated it"',
       '| Numbering | Left to the judge (one used M1, M2; another used letters). | M1, M2 and so on',
       'the log also counts `partlyReal` and `understated`',

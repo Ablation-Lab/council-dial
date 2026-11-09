@@ -34,9 +34,9 @@ test('C1: the target is kept at the same length when planned and read back', () 
   assert.equal(a.target.length, 591);
   assert.equal(run(p, ['setup', '--run', a.runId]).target, a.target, 'setup gives the planned target unchanged');
   assert.equal(run(p, ['list']).runs[0].target, a.target);
-  const over = run(p, [...QUICK], 'x'.repeat(700));
-  assert.equal(Array.from(over.target).length, TARGET_MAX);
-  assert.equal(run(p, ['setup', '--run', over.runId]).target, over.target);
+  // A longer description is refused, not cut, so nothing at its end is lost.
+  assert.throws(() => run(p, [...QUICK], 'x'.repeat(700)), new RegExp(`is 700 characters; the most is ${TARGET_MAX}`));
+  assert.equal(run(p, [...QUICK], 'x'.repeat(TARGET_MAX)).target.length, TARGET_MAX);
 });
 
 test('S1: a saved report keeps its text, but its links, images and HTML are inside a code block', () => {
@@ -189,7 +189,7 @@ test('estimate: no history for the type, so no figure and a smaller trial run su
   assert.equal(e.tokens, null);
   assert.equal(e.trialSuggested, true);
   const text = e.notes.join(' ');
-  assert.match(text, /no estimate for it\. If the material is more than 5 files or a whole folder, or you can't tell how many files it covers, suggest a smaller trial run first: a Quick council \(3 generalist reviewers, pooled\), or this council on one part of the material/);
+  assert.match(text, /no estimate for it\. If the material is more than 5 files or a whole folder, suggest a smaller trial run first: a Quick council \(3 generalist reviewers, pooled\), or this council on one part of the material/);
   assert.match(text, /For up to 5 named files, a trial isn't needed\./);
   assert.match(text, /every reviewer reads all of it/);
   assert.match(text, e.label.includes(' v3') ? /runs if the judge throws a finding out or there's a severity to check/ : /runs only if the judge throws a finding out/);

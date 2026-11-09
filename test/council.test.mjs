@@ -24,7 +24,7 @@ test('every type gives the right steps and agent count', () => {
     [['--reviewers', 'specialised', '--combine', 'judged', '--no-appeal'], 'specialised-3/judged', ['review:3', 'combine:1'], 4],
     [['--reviewers', 'generalist', '--combine', 'pooled', '--n', '4'], 'generalist-4/pooled', ['review:4', 'combine:0'], 4],
     [['--reviewers', 'generalist', '--combine', 'consensus'], 'generalist-3/consensus', ['review:3', 'combine:0'], 3],
-    [['--reviewers', 'specialised', '--combine', 'judged', '--debate', '--baseline'], 'specialised-3/judged+debate+appeal', ['review:3', 'debate:3', 'combine:1', 'appeal:1', 'baseline:1'], 9],
+    [['--reviewers', 'specialised', '--combine', 'judged', '--debate', '--baseline'], 'specialised-3/judged+debate+appeal+baseline', ['review:3', 'debate:3', 'combine:1', 'appeal:1', 'baseline:1'], 9],
     [['--reviewers', 'generalist', '--combine', 'judged', '--sequential', '--n', '2'], 'generalist-2/judged+sequential+appeal', ['review:2', 'combine:1', 'appeal:1'], 4],
     [['--reviewers', 'specialised', '--combine', 'pooled', '--roles', 'accessibility, performance'], 'specialised-2 [accessibility, performance]/pooled', ['review:2', 'combine:0'], 2],
   ];
@@ -72,7 +72,7 @@ test('plan logs the type; log, update, list and compare work; the Markdown log i
   run(p, ['log', '--run', b.runId], JSON.stringify({ findingsPerReviewer: [6, 6, 5], findingsCombined: 14, confirmed: 6, dismissed: 5, wallMinutes: 6 }));
   run(p, ['update', '--run', a.runId], JSON.stringify({ fixesMade: 7, fixesFailedRecheck: 2, regressions: 1, newFindings: 1 }));
   const c = run(p, ['compare']).byType;
-  const judged = c.find(x => x.label === 'specialised-3/judged+appeal');
+  const judged = c.find(x => x.label === 'specialised-3/judged+appeal+baseline');
   assert.equal(judged.keptPercent, 89, 'REAL and OVERSTATED are both kept');
   assert.equal(judged.overstatedOfKeptPercent, 13);
   assert.equal(judged.fixesFailedRecheckPercent, 29);
@@ -80,7 +80,7 @@ test('plan logs the type; log, update, list and compare work; the Markdown log i
   assert.deepEqual(judged.minutes, { wall: { perRun: 12.5, runs: 1 }, criticalPath: null, unlabelled: null });
   assert.equal(c.find(x => x.label === 'generalist-3/pooled').dismissedPercent, 36);
   const md = fs.readFileSync(path.join(p, 'reviews/review-log.md'), 'utf8');
-  assert.match(md, /\| specialised-3\/judged\+appeal \| 1 \| 9 \| 89% \| 11% \| 13% \| wall 12\.5 \(1 run\) \| - \| 29% \| 1 \| 8 vs 3 \(1 run\) \| - \| 0 \| 0 \|/);
+  assert.match(md, /\| specialised-3\/judged\+appeal\+baseline \| 1 \| 9 \| 89% \| 11% \| 13% \| wall 12\.5 \(1 run\) \| - \| 29% \| 1 \| 8 vs 3 \(1 run\) \| - \| 0 \| 0 \|/);
   assert.match(md, /2 of 7/);
   const lines = fs.readFileSync(path.join(p, 'reviews/review-log.jsonl'), 'utf8').trim().split('\n');
   assert.equal(lines.length, 5, 'append-only: 2 plans, 2 results, 1 update');
@@ -132,7 +132,8 @@ test('the sample review log compares as the README says', () => {
   const runs = runsFrom(readLog(path.join(SAMPLES, 'reviews', 'review-log.jsonl')));
   assert.equal(runs.length, 6);
   const c = compare(runs);
-  assert.deepEqual(c.map(x => x.label), ['specialised-3/judged', 'generalist-3/pooled', 'specialised-3/judged+debate']);
+  // The run with a baseline is its own type (+baseline), so it isn't pooled with the runs without one.
+  assert.deepEqual(c.map(x => x.label), ['generalist-3/pooled', 'specialised-3/judged', 'specialised-3/judged+baseline', 'specialised-3/judged+debate']);
   assert.ok(c.find(x => x.label === 'specialised-3/judged').keptPercent > c.find(x => x.label === 'generalist-3/pooled').keptPercent);
 });
 

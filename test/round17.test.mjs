@@ -48,8 +48,8 @@ liteTest('SKILL.md: raw mode is opt-in, drops only the check agent, is labelled 
   const skill = readLite('skills/council-dial-lite/SKILL.md');
   assert.match(skill, /- \*\*Raw mode:\*\* only if the user asks for a raw run\./);
   assert.match(skill, /A raw run has one agent fewer than the same type otherwise would \(no check\); say so when you count\. Its label has `\+raw` after the other extras/);
-  assert.match(skill, /`\+debate`, `\+sequential`, `\+appeal` and `\+raw` for each one the run has, in that order\. A run logged before Lite 1\.6\.0 has no `type\.raw`, and isn't raw\./);
-  assert.match(skill, /`lite: specialised-3\/judged\+appeal\+raw v3 @claude-opus-5-5 \(Lite 1\.10\.1\)`/);
+  assert.match(skill, /`\+debate`, `\+sequential`, `\+appeal`, `\+baseline`, `\+running-code` and `\+raw` for each one the run has, in that order: `\+baseline` when `type\.baseline` is `true`, and `\+running-code` when `runningCode` is `allowed`\. A run logged before Lite 1\.6\.0 has no `type\.raw`, and isn't raw; one with no `runningCode` didn't allow it\./);
+  assert.match(skill, /`lite: specialised-3\/judged\+appeal\+raw v3 @claude-opus-5-5 \(Lite 1.11.0\)`/);
   assert.match(skill, /\| check \| always, except in a raw run \| `check` \|/);
   assert.match(skill, /Read `\$\{CLAUDE_SKILL_DIR\}\/check-brief\.md` first \(in a raw run, `\$\{CLAUDE_SKILL_DIR\}\/raw-handoff\.md`\), before any file in `briefs\/`\./);
 
@@ -82,8 +82,8 @@ liteTest('README: raw mode says what it saves, skips and costs', () => {
   const raw = section(readLite('README.md'), 'Raw mode');
   for (const x of ['**What runs:**', '**What it saves:**', '**What it skips:**', '**Handing it off:**', '**What it costs:**', '**What you lose:**']) assert.ok(raw.includes(x), x);
   assert.match(raw, /a Standard raw run starts 5 agents, not 6/);
-  assert.match(raw, /`ANALYSE-THIS-RUN\.txt`, a short instruction file built from a fixed template in the plugin/);
-  assert.match(raw, /In our first three Lite runs, the check was 15% to 20% of the agents' logged tokens\. From Lite 1\.8\.0 it also reads the briefs and their templates, and from 1\.9\.0 Claude's overview: in the 1\.9\.0 runs it logged about 39,000 tokens and 12 to 18 tool uses, 20% to 36% more than all three reviewers of the same run together\./);
+  assert.match(raw, /`ANALYSE-THIS-RUN\.txt`, a short note built from a fixed template in the plugin/);
+  assert.match(raw, /In our first three Lite runs, the check was 15% to 20% of the agents' logged tokens\. From Lite 1\.8\.0 it also reads the briefs and their templates, and from 1\.9\.0 Claude's overview: in the 1\.9\.0 runs it logged about 39,000 tokens and 12 to 18 tool uses, 20% to 36% more than all three reviewers of the same run together \(from our run notes, not yet published\)\./);
   assert.match(raw, /Lite never sees the analysis session's tokens/);
   assert.match(raw, /no check agent compares the analyst's summary with the reports/);
   assert.match(raw, /say `Analyse the raw Council Dial Lite run <run id>\.`/);
@@ -107,14 +107,14 @@ const checkModels = (md, f) => {
   const s = section(md, 'Choosing models per seat');
   assert.match(s, /They come from a single batch, on test material Claude wrote, so treat them as leads, not guarantees\./, f);
   assert.match(s, /on test material Claude wrote: 72 trials, on Opus, Sonnet and Haiku 5\.5 at medium and low effort/, f);
-  assert.match(s, /161 of 162 in all, and at least 26 of 27 for each model at each effort level\. So a Haiku appeal looked enough for checking dismissals\./, f);
+  assert.match(s, /161 of 162 in all, and at least 26 of 27 for each model at each effort level\. All three dismissal errors in the batch were Haiku's at medium effort: one UNSURE on a wrongful dismissal, and two fair dismissals called wrong \(from our run notes, not yet published\)\./, f);
   // The batch report's revised headline (9 Nov 2026): R4 accepted at LOW or MED.
   assert.match(s, /Opus caught 36 of 36, Haiku 31 of 36 \(about 86%\) and Sonnet 25 of 36 \(about 69%\)\./, f);
   assert.match(s, /Sonnet at low effort was the one weak combination, at 9 of 18\./, f);
   assert.match(s, /Under the original answer key, which accepted R4 only at MED or HIGH, the figures were Opus 37 of 42, Haiku 32 of 42 and Sonnet 25 of 42\./, f);
-  assert.match(s, /With its worst case spelled out, both raters rated R4 critical; with a plain description, one rated it medium and the other low\. So judges and appeals may be swayed by how dramatically a finding is written\./, f);
+  assert.match(s, /With its worst case spelled out, both rated R4 critical; with a plain description, one rated it medium and the other low\. That's a hint from two raters and one item, not yet tested on judges or appeals: they may be swayed by how dramatically a finding is written\./, f);
   assert.match(s, /https:\/\/github\.com\/Ablation-Lab\/evolving-review-councils\/blob\/main\/core-method\/experiment-plan\.md#appeal-stress-test-first-runs-8-nov-2026/, f);
-  assert.match(s, /The revised figures rest on two outside raters\./, f);
+  assert.match(s, /The revised figures rest on two AI chat models' ratings, and single ratings are noisy\./, f);
   assert.doesNotMatch(s, /about 88%|about 60%|Half of the severity misses/, f);
   return s;
 };

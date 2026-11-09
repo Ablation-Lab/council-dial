@@ -33,7 +33,8 @@ test('the type records the models and is named after the model the subagents run
   assert.equal(inherit.label, 'specialised-3/judged+appeal @claude-opus-5-5');
   assert.deepEqual(inherit.type.models, { main: 'claude-opus-5-5', requested: null, env: null, force: false, effective: 'claude-opus-5-5' });
   assert.equal(inherit.agentModel, null);
-  assert.deepEqual(inherit.warnings, []);
+  // Brief version 2: only the warning that every agent is general-purpose, with every tool.
+  assert.deepEqual(inherit.warnings.filter(w => !/general-purpose agent, which has every tool/.test(w)), []);
   const sonnet = plan(['--model', 'sonnet', '--main-model', 'claude-opus-5-5']);
   assert.equal(sonnet.label, 'specialised-3/judged+appeal @sonnet');
   assert.equal(sonnet.agentModel, 'sonnet');

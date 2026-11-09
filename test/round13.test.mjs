@@ -117,7 +117,7 @@ test('an exclusion in the target line reaches every brief', () => {
   for (const a of plan.steps.flatMap(s => s.agents).filter(a => a.role !== 'appeal')) assert.ok(a.brief.includes('not the shelves/ folder (sample data)'), a.label);
   const s = read('plugin/skills/council-dial/SKILL.md');
   assert.match(s, /If anything next to it is out of scope, such as a folder of sample data, say so in the same line, such as `shelfkeep\.py, scripts\/tidy\.sh and README\.md; not the shelves\/ folder \(sample data\)`: this line is the only description of the target every brief gets, so an exclusion you only tell the user doesn't reach the agents\./);
-  assert.match(s, /then where the material is \(its paths relative to the project root, as the target line gives them, since an absolute path would put the user's folder names into every finding that cites it; anything out of scope exactly as the target line says, and that the review log folder, `reviews\/` or the one you passed with `--log-dir`, isn't part of the material\)/);
+  assert.match(s, /then where the material is \(its paths relative to the project root, as the target line gives them, since an absolute path would put the user's folder names into every finding that cites it; anything out of scope exactly as the target line says, and the line `Open no file under <log folder>: it isn't part of the material\.`, with the review log folder's path relative to the project root, `reviews` or the one you passed with `--log-dir`\)/);
 });
 
 // 4. Nothing added to prompts; deviations logged with their exact text.

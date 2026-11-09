@@ -73,8 +73,8 @@ test('compare builds review-log.md when a copied log has none, and points to it'
   fs.copyFileSync(path.join(ROOT, 'samples', 'reviews', 'review-log.jsonl'), jsonl(p));
   const c = run(p, ['compare']);
   assert.equal(c.log, 'reviews/review-log.md');
-  assert.match(fs.readFileSync(path.join(p, 'reviews', 'review-log.md'), 'utf8'), /\| specialised-3\/judged \| 3 \|/);
-  assert.deepEqual(c.byType.map(g => g.label), ['specialised-3/judged', 'generalist-3/pooled', 'specialised-3/judged+debate']);
+  assert.match(fs.readFileSync(path.join(p, 'reviews', 'review-log.md'), 'utf8'), /\| specialised-3\/judged \| 2 \|/);
+  assert.deepEqual(c.byType.map(g => g.label), ['generalist-3/pooled', 'specialised-3/judged', 'specialised-3/judged+baseline', 'specialised-3/judged+debate']);
   const empty = tmp();
   const e = run(empty, ['compare']);
   assert.equal(e.log, undefined, 'no log, no file to point to');

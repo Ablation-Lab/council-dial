@@ -5,7 +5,7 @@ This file records the first two real Council Dial runs on its own sample (`sampl
 **How findings are cited.** Finding numbers restart in every run: each reviewer numbers its own findings from 1, and each judge numbers its merged findings from M1. This file therefore cites every finding with its run id, such as `20261107-2f23/M12` for run 2's judge finding M12, or "run 2's security reviewer, finding 6" for a reviewer's own number. Two different findings were each called "M12" in the two runs, and that is how they got mixed up (see section 7). Council Dial now cites findings this way in what it writes; the reviewer and judge briefs are unchanged, so brief version 2 stays comparable.
 
 Where the rest is kept:
-- **Review log:** `reviews/review-log.jsonl` and `review-log.md` in the overnight-skills project (outside this repo), with every other real run.
+- **Review log:** `reviews/review-log.jsonl` and `review-log.md` in a private working project (outside this repo), with every other real run.
 - **Saved reports:** each agent's full report, in `reviews/20261107-f675/` and `reviews/20261107-2f23/` next to that log. Both folders are complete: run 1 has 4 of 4 reports and run 2 has 5 of 5, 9 reports across the 2 runs (checked against the agents each run's type starts).
 - **How the reports were saved:** after the runs, from the reports as they came back in the session. The `report` command didn't exist yet when either run happened.
   - **What was changed:** the harness's two-space indent was removed; nothing else.
