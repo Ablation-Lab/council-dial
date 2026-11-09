@@ -40,7 +40,7 @@ export const VERSION = 3;
 export const BRIEF_VERSIONS = [2, 3];
 // Council Dial's own version, recorded with each plan so a run's setup can be rebuilt exactly. Keep it
 // equal to the plugin manifest's version (a test checks).
-export const PLUGIN_VERSION = '1.5.5';
+export const PLUGIN_VERSION = '1.5.6';
 const COMMANDS = ['plan', 'estimate', 'log', 'update', 'report', 'setup', 'list', 'compare'];
 // The description of what's reviewed is kept at this length when planned and when read back.
 export const TARGET_MAX = 600;

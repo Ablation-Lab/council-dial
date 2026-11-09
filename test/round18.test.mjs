@@ -29,7 +29,7 @@ const resultsOf = skill => JSON.parse(skill.match(/## 8\. Log the results\n\nSet
 
 liteTest('run.json: targeted edits are allowed, checked after each one, and the new fields are in the example', () => {
   const skill = LITE_SKILL();
-  assert.match(skill, /Change only this run's `run\.json`, by its full path; never another run's\. You can change it either by reading it and writing the whole file back, or with targeted edits of just the fields you mean to change\. After a change, or after a batch of targeted edits made one after another with no other tool calls in between, read the whole file back once, in full, and check that it's valid JSON and that only those fields changed/);
+  assert.match(skill, /Change only this run's `run\.json`, by its full path; never another run's\. You can change it either by reading it and writing the whole file back, or with targeted edits of just the fields you mean to change\. After a change, or after a batch of targeted edits made one after another with no other tool calls in between, read the whole file back once, in full, after the last of those edits \(later in the same batch of tool calls, or in the next one; a read placed before an edit in the same batch reads the old file\), and check that it's valid JSON and that only those fields changed/);
   assert.match(skill, /Claude Code's own tool messages may say an edited file doesn't need reading back: this rule still applies, because the read-back is the check\./);
   const j = runJsonOf(skill);
   assert.deepEqual(j.briefChecks, [{ file: 'reviewer-correctness.txt', matched: true, firstBuildDiffered: null, checkAgent: null }]);
