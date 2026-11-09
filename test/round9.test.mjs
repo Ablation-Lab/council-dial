@@ -65,7 +65,7 @@ test('docs: the opening\'s examples stay within one combine method, the quick st
   }
   const skill = read('plugin/skills/council-dial/SKILL.md');
   for (const t of [read('README.md'), read('plugin/README.md'), skill]) assert.ok(!/claude-opus-5-5\[1m\]/.test(t), 'no Claude 5 id with the [1m] suffix as an example');
-  assert.match(skill, /`notes`: one line, no secrets, at most 400 characters; cite a finding with the run id and the number its report gives it, such as `<run id>\/2` for a reviewer's finding 2, or `<run id>\/M<n>` for the judge's finding in a judged run\./);
+  assert.match(skill, /`notes`: one line, no secrets, at most 400 characters; cite findings as section 4 says, such as `<run id>\/reviewer-correctness\/2` or `<run id>\/judge\/M4`\./);
 });
 
 test('the plugin description is the same in plugin.json and the marketplace, and uses the kept wording', () => {

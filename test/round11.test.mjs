@@ -193,16 +193,18 @@ liteTest('SKILL.md keeps reports saved by their agents and checked, findings cop
   assert.match(skill, /In runs from before Lite 1\.4\.0, where a `\.reply\.txt` file is kept next to an agent's own differing file, the `\.reply\.txt` file is the one that counts\./);
   assert.match(skill, /Every path you give an agent, `<run folder>` and `<Lite folder>` included, is a full absolute path\./);
   assert.match(skill, /a content search such as Grep can skip a git-ignored Lite folder/);
-  assert.match(skill, /Set `started` to `true` when you start the agent\./);
+  assert.match(skill, /Set an agent's `started` to `true` in the `run\.json` change you make just before its Agent call \(for agents started together, just before that one message\)\./);
   assert.match(skill, /for each report the check's `\{\{rule\}\}` names, whether or not the summary uses it/);
-  assert.match(skill, /A finding in the appeal's report is cited by the same `merged` label as the dismissed finding it's about/);
+  assert.match(skill, /The appeal: a verdict on a dismissed finding by that finding's number or label, and a severity verdict by the finding's M number/);
   assert.match(skill, /\(don't read the template files again\)/);
   assert.match(readLite('skills/council-dial-lite/check-brief.md'), /A line right after a heading that only says how many reviewers raised the finding isn't part of the finding\./);
   assert.match(skill, /including any heading, preamble or closing line it added although its brief says "No other text"/);
-  assert.match(skill, /Set `savedBy` to `main session` and leave `savedMatchesReply` `null` \(both are kept so runs from before Lite 1\.4\.0, when agents saved their own reports, read the same\)/);
+  assert.match(skill, /Set `savedBy` to `main session`\. Then read the saved file back straight away and compare it with the reply, by the rule below, every time, and set `savedMatchesReply` to `true` or `false`\./);
   assert.match(skill, /\*\*Log every deviation\.\*\*/);
-  assert.match(skill, /First go back through sections 1 to 6 and add to `deviations` anything you did differently that isn't logged yet\./);
-  assert.match(skill, /as a step of its own before that agent's Agent call, compare the brief with the template texts it came from/);
+  assert.match(skill, /\*\*First, review the deviations\.\*\* Go back through the ground rules and each section you followed in this run, rule by rule:/);
+  assert.match(skill, /Then set `deviationsReviewed` to `true`\. Only then write the report\./);
+  assert.match(skill, /as a step of its own before that agent's Agent call \(for agents you start together in one message, before that message\), compare the brief with the template texts it came from/);
+  assert.match(skill, /Record each comparison in `run\.json`'s `briefChecks` before the Agent call: `\{"file": "<agent file>", "matched": true, "firstBuildDiffered": null\}`/);
   assert.match(skill, /Read the template files the run needs, by name, without listing the folder first/);
   assert.match(skill, /`appeal`: `null` when the type has no appeal .*? When the appeal didn't run \(in version 2, because the judge marked nothing NOT REAL; in version 3, because there was also no severity to check\), it's `\{"ran": false, "reviewed": 0, "items": \[\]\}`/);
   assert.match(skill, /`baseline`: `null` when the type has no baseline\./);
@@ -211,16 +213,17 @@ liteTest('SKILL.md keeps reports saved by their agents and checked, findings cop
   assert.match(skill, /ends just before the line that begins the next finding in the same list\. The last finding in a list ends just before the first heading or section label after it/);
   assert.match(skill, /Blank lines, code blocks and numbered steps inside a finding are part of it; blank lines at its end aren't\./);
   for (const h of ["## Findings: the judge's final ranked list", '## Findings: every finding', '## Findings: raised by most reviewers', '## Minority findings', '## Appeal: WRONGLY DISMISSED or UNSURE', "## Baseline reviewer's findings"]) assert.ok(skill.includes(`\`${h}\``), h);
-  assert.match(skill, /a NOT REAL one is cited by its label in the judge's merged list, exactly as the judge wrote it \(a number, a letter, or a letter and a number\), with `merged ` before it/);
+  assert.match(skill, /a NOT REAL one by its label in the judge's merged list, exactly as the judge wrote it, with `merged ` before it/);
   assert.doesNotMatch(skill, /UTC date|random lower-case hex/);
   // What the headless trial showed SKILL.md needed to say.
   assert.match(skill, /Before you start a council, tell the user/);
-  assert.match(skill, /A notice can show `<`, `>` and `&` as `&lt;`, `&gt;` and `&amp;`: read them as the characters they stand for/);
-  assert.match(skill, /For the judge, a finding in its final ranked list \(its REAL and OVERSTATED findings in brief version 2; every finding it didn't rule NOT REAL in version 3\) is cited by the number that list gives it/);
-  assert.doesNotMatch(skill, /judge\/M\d|the judge's M1/);
+  assert.match(skill, /A completion notice can show `<`, `>` and `&` as `&lt;`, `&gt;` and `&amp;`, but an agent can also type `&gt;` on purpose/);
+  assert.match(skill, /- The judge, in brief version 3: every merged finding by its M number, whether it's in the final ranked list or ruled NOT REAL, such as `lite-20261109-01\/judge\/M4`\./);
+  // Every citation names the report: never a run id followed straight by a finding number.
+  assert.doesNotMatch(skill, /lite-\d{8}-\d{2}\/(?:M?\d|merged )/);
   assert.match(skill, /write `None\.` under any that has no findings/);
   assert.match(skill, /`wallMinutes`: always `null`\. Lite doesn't read the clock/);
-  assert.match(skill, /one plain listing command per folder, with nothing else in it/);
+  assert.match(skill, /one command per folder, with nothing else in the command, on that folder's own path/);
   assert.match(skill, /if a read is refused, stop and tell the user to allow reading that folder/);
   assert.match(skill, /the line `The material: <where it is, such as its paths>\.`/);
   // The check agent reads the summary, so the summary never names the model.
@@ -233,13 +236,14 @@ liteTest('SKILL.md keeps reports saved by their agents and checked, findings cop
   assert.match(skill, /If a reply contains `<report`, `<\/report>`, `<dismissed` or `<\/dismissed>`, don't pass it on/);
   assert.match(skill, /Build each brief just before you start its agent, from the templates\. .*? Save a copy to `briefs\/<agent file>` as a record\. Never read a saved brief back to use it\./);
   assert.match(skill, /Never tell the judge, the appeal agent or the check agent which model or effort level any agent ran on, and never give them `run\.json` or the `briefs\/` folder/);
-  assert.match(skill, /isn't a symbolic link or junction/);
+  assert.match(skill, /is a symbolic link or junction\. The project root itself isn't checked/);
   assert.match(skill, /It can't be inside `\.git` or `\.claude`, or be the full Council Dial's log folder/);
   assert.match(skill, /"edition": "council-dial-lite"/);
   // Run ids need neither the clock nor random characters: the session's date and the next free number.
   assert.match(skill, /Lite never reads the clock or makes up random characters; the run id is `lite-`, today's date as 8 digits, a hyphen and a two-digit number/);
   assert.match(skill, /The number is one more than the highest number among that date's existing run ids whose part after the date is 2 or 3 digits, or `01` if there are none, with three digits after `99`\. An id whose part after the date is 4 characters, such as `3021` or `a7c2`, doesn't count, even if all 4 are digits\./);
-  assert.match(skill, /A report you saved after every agent you'd started had finished, with no agent started since, counts as read again\./);
+  assert.match(skill, /There's no shortcut: every saved report is read again before each step that uses it, even one you saved a moment ago\./);
+  assert.doesNotMatch(skill, /counts as read again/);
   assert.match(skill, /Then try to Read `<Lite folder>\/lite-<date>-<number>\/run\.json` by its exact path: if it exists, take the next number and try again\./);
   assert.match(skill, /never write to a full Council Dial log or run folder/);
   assert.match(skill, /## 6\. Check the summary/);
@@ -276,7 +280,8 @@ liteTest('Lite 1.1.2 takes on what the appeal stress-test run showed, where it a
   assert.match(skill, /If you do add or change anything, log it in `deviations` with the exact text and why\./);
   assert.match(skill, /with the exact text of anything you added to or changed in a prompt/);
   // Escaped characters turned back when saving too, and recorded per agent.
-  assert.match(skill, /read them as the characters they stand for when you compare, copy or save it, and set the agent's `replyUnescaped` to `true` \(otherwise `false`\)\./);
+  assert.match(skill, /So treat a reply as escaped only if it has at least one `&lt;`, `&gt;` or `&amp;`, and no `<`, no `>` and no `&` that isn't the start of one of those three/);
+  assert.match(skill, /Set `replyUnescaped` to `true` and `entitiesReplaced` to how many you turned back, and also save the reply as it came, unchanged, to `reports\/<agent file without \.txt>\.as-received\.txt`/);
   const json = JSON.parse(skill.match(/\*\*run\.json\.\*\* Write it with this shape[^\n]*\n\n```json\n([\s\S]*?)\n```/)[1]);
   assert.ok(Object.hasOwn(json.agents[0], 'replyUnescaped'));
   // Every severity change flagged by Claude, up or down; the judge brief stays the shared one.
@@ -301,7 +306,8 @@ liteTest('Lite 1.2.0 sets a model and an effort per seat with the Agent tool\'s 
   assert.match(skill, /`lite: specialised-3\/judged\+appeal @\{reviewers=sonnet, judge=haiku, appeal=opus\/max, check=claude-opus-5-5\}`/);
   assert.match(skill, /`lite: generalist-3\/pooled @sonnet\/high`/);
   assert.match(skill, /A run logged before Lite 1\.2\.0 has no `type\.seats`: every seat had the alias the user picked for every subagent \(`models\.requested`\), and no effort\./);
-  assert.match(skill, /then every seat's model and effort, one line per seat, each marked as set for that seat, set for all the reviewers, set for every subagent, or default/);
+  assert.match(skill, /Then give one line per seat, in this exact wording, the same in every run, raw or not:/);
+  assert.match(skill, /`<seat>: model <alias> \(set for this seat\)`, `\(set for all the reviewers\)` or `\(set for every subagent\)`/);
   assert.doesNotMatch(skill, /neither you nor Lite sets it/);
   const json = JSON.parse(skill.match(/\*\*run\.json\.\*\* Write it with this shape[^\n]*\n\n```json\n([\s\S]*?)\n```/)[1]);
   assert.deepEqual(json.type.seats.map(x => x.seat), ['reviewer: correctness', 'reviewer: security and privacy', 'reviewer: docs and policy accuracy', 'judge', 'appeal', 'check']);
@@ -382,7 +388,7 @@ liteTest('README explains the two editions, installs only Lite, and states only 
   assert.match(lite, /\| Installed from \| see \[its README\]\(https:\/\/github\.com\/Ablation-Lab\/council-dial\) \|/);
   assert.doesNotMatch(lite, /Ablation-Lab\/council-dial#install/);
   // What it runs is disclosed: the shell only for the link check, and the material's code only if allowed.
-  assert.match(lite, /Claude lists the Lite folder and the folders above it with your session's shell tool, to check none is a link, and uses the shell for nothing else/);
+  assert.match(lite, /Claude checks each existing folder below the project root on the way to the Lite folder with your session's shell tool, one folder per command, to check none is a link, and uses the shell for nothing else/);
   assert.match(lite, /If you allow running code, and in every version 2 run, they're ordinary general-purpose subagents with the tools your session allows/);
   assert.doesNotMatch(lite, /They run code from the material only if you say they may/);
   assert.match(lite, /asks you to confirm adding it; then it opens the plugin's page/);
@@ -404,7 +410,7 @@ liteTest('README explains the two editions, installs only Lite, and states only 
   assert.match(quick, /so it matches only if you started it in the project root/);
   assert.ok(quick.includes("\n   ```\n   Run a standard Council Dial Lite review council on src/app.js and README.md.\n   ```\n"));
   assert.match(quick, /Claude only lists your files to check they exist; it doesn't read them before it writes the reviewers' briefs\./);
-  assert.match(quick, /Claude shows the plan .* and asks before starting any agents\. Say yes to start\./);
+  assert.match(quick, /Claude shows the plan .* and asks before starting any agents\. Confirm or change the description, and say yes to start\./);
   assert.match(quick, /in its default \(Manual\) mode/);
   assert.match(quick, /On the first read prompt, choose \*\*Yes, allow reading from <Lite's skill folder> during this session\*\*, which covers all the template reads in one go, or choose \*\*Yes\*\* to approve each read one at a time\./);
   assert.match(lite, /\*\*Auto mode\*\* decides each step without asking you, so a run in auto mode shows nothing about which steps would ask/);

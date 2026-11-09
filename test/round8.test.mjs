@@ -39,12 +39,19 @@ test('the saved-report header mentions the judge only for judged runs', () => {
   const p = tmp();
   const pooled = run(p, ['plan', '--reviewers', 'generalist', '--combine', 'pooled'], T);
   const saved = fs.readFileSync(path.join(p, run(p, ['report', '--run', pooled.runId, '--agent', 'reviewer 1'], '1. LOW: a typo').file), 'utf8');
-  assert.match(saved, new RegExp(`such as ${pooled.runId}/2 for a reviewer's finding 2\.`));
+  assert.match(saved, new RegExp(`such as ${pooled.runId}/reviewer-1/2 for this report's finding 2\.`));
   assert.ok(!/judge/.test(saved), 'no judge in a pooled run\'s header');
   const consensus = run(p, ['plan', '--reviewers', 'generalist', '--combine', 'consensus'], T);
   assert.ok(!/judge/.test(fs.readFileSync(path.join(p, run(p, ['report', '--run', consensus.runId, '--agent', 'reviewer 2'], '1. LOW: a typo').file), 'utf8')));
   const judged = run(p, ['plan', '--reviewers', 'generalist', '--combine', 'judged'], T);
-  assert.match(fs.readFileSync(path.join(p, run(p, ['report', '--run', judged.runId, '--agent', 'judge'], 'M1. REAL').file), 'utf8'), /or .*\/M1 for the judge's finding M1\./);
+  // The judge's own report cites itself: by number in brief version 2, by M number in version 3.
+  const judgeV2 = fs.readFileSync(path.join(p, run(p, ['report', '--run', judged.runId, '--agent', 'judge'], 'M1. REAL').file), 'utf8');
+  assert.match(judgeV2, new RegExp(`such as ${judged.runId}/judge/2 for this report's finding 2\\.`));
+  const judgedV3 = run(p, ['plan', '--reviewers', 'generalist', '--combine', 'judged', '--brief-version', '3'], T);
+  const judgeV3 = fs.readFileSync(path.join(p, run(p, ['report', '--run', judgedV3.runId, '--agent', 'judge'], 'M1. REAL').file), 'utf8');
+  assert.match(judgeV3, new RegExp(`such as ${judgedV3.runId}/judge/M1 for this report's finding M1\\.`));
+  // A reviewer's report in a judged run also points to the judge's findings.
+  assert.match(fs.readFileSync(path.join(p, run(p, ['report', '--run', judged.runId, '--agent', 'reviewer 1'], '1. LOW: a typo').file), 'utf8'), /or .*\/judge\/M1 for the judge's finding M1\./);
 });
 
 test('docs: both READMEs open with a plain-English section and a quick start, and the notes limit is documented', () => {
@@ -65,8 +72,8 @@ test('docs: both READMEs open with a plain-English section and a quick start, an
   assert.match(skill, /`update` cuts longer notes and returns a `warning`/);
 });
 
-test('the version is 1.5.3 everywhere', () => {
-  assert.equal(PLUGIN_VERSION, '1.5.3');
-  assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, 'plugin/.claude-plugin/plugin.json'), 'utf8')).version, '1.5.3');
-  assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, '.claude-plugin/marketplace.json'), 'utf8')).plugins[0].version, '1.5.3');
+test('the version is 1.5.4 everywhere', () => {
+  assert.equal(PLUGIN_VERSION, '1.5.4');
+  assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, 'plugin/.claude-plugin/plugin.json'), 'utf8')).version, '1.5.4');
+  assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, '.claude-plugin/marketplace.json'), 'utf8')).plugins[0].version, '1.5.4');
 });

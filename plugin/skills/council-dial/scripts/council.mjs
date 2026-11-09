@@ -40,12 +40,14 @@ export const VERSION = 3;
 export const BRIEF_VERSIONS = [2, 3];
 // Council Dial's own version, recorded with each plan so a run's setup can be rebuilt exactly. Keep it
 // equal to the plugin manifest's version (a test checks).
-export const PLUGIN_VERSION = '1.5.3';
+export const PLUGIN_VERSION = '1.5.4';
 const COMMANDS = ['plan', 'estimate', 'log', 'update', 'report', 'setup', 'list', 'compare'];
 // The description of what's reviewed is kept at this length when planned and when read back.
 export const TARGET_MAX = 600;
 // The longest notes a results or recheck row keeps, in characters; log and update warn when they cut them.
 export const NOTES_MAX = 400;
+// The longest note an agents entry keeps, on what that agent did that its brief didn't ask for.
+export const AGENT_NOTES_MAX = 200;
 // Notes are a line of text: anything else is refused when logged, and read back from the log as no
 // notes, so an object is never logged or shown as [object Object].
 function notesOf(v, strict) {
@@ -141,7 +143,9 @@ export function clean(text, max = 300) {
   return chars.length > max ? chars.slice(0, max - 1).join('') + '…' : t;
 }
 // One line of plain text for Markdown: no table breaks, HTML, links or images.
-const inlineMd = (s, max) => clean(String(s), max).replace(/\|/g, '/').replace(/</g, '&lt;').replace(/\[/g, '\\[').replace(/!/g, '&#33;').replace(/`/g, "'").replace(/:\/\//g, '&#58;//').replace(/\bwww\./gi, 'www&#46;');
+// A backslash is doubled first, so text can't use one to undo the \[ that stops a link; @ is escaped so an
+// email address doesn't become a link.
+const inlineMd = (s, max) => clean(String(s), max).replace(/\\/g, '\\\\').replace(/@/g, '&#64;').replace(/\|/g, '/').replace(/</g, '&lt;').replace(/\[/g, '\\[').replace(/!/g, '&#33;').replace(/`/g, "'").replace(/:\/\//g, '&#58;//').replace(/\bwww\./gi, 'www&#46;');
 const cell = s => inlineMd(s, 120);
 
 const SHELL_CHARS = /[$`'"\\;&|<>*?%!{}\0\p{Pi}\p{Pf}]/u;
@@ -664,7 +668,9 @@ export function unescapeNotice(text) {
   const out = String(text ?? '').replace(/&(lt|gt|amp);/g, (_, e) => { count++; return e === 'lt' ? '<' : e === 'gt' ? '>' : '&'; });
   return { text: out, count };
 }
-const looksEscaped = t => /&(lt|gt|amp);/.test(t) && !/[<>]/.test(t);
+// Escaped throughout: some &lt;, &gt; or &amp;, and no <, > or & left as itself (a notice that escapes does
+// so everywhere, so any of those means the agent typed the entity itself, such as in a code span).
+const looksEscaped = t => /&(lt|gt|amp);/.test(t) && !/[<>]/.test(t) && !/&(?!(lt|gt|amp);)/.test(t);
 
 // Severity changes: for each merged finding whose final severity differs from at least one reviewer's,
 // Claude lists the reviewers' severities, the judge's, and the judge's reason when it gave one (the
@@ -685,9 +691,9 @@ function checkSeverityChanges(list) {
   if (!Array.isArray(list)) throw new Error('severityChanges must be a list, one entry per merged finding whose severity differs from any reviewer\'s');
   if (list.length > 50) throw new Error('severityChanges can have at most 50 entries');
   return list.map((x, i) => {
-    if (!x || typeof x !== 'object' || Array.isArray(x)) throw new Error(`severityChanges[${i}] must be an object: {"finding": "<run id>/M4", "reviewers": ["MED", "HIGH"], "judge": "HIGH", "reason": "<the judge's reason, or null>"}`);
+    if (!x || typeof x !== 'object' || Array.isArray(x)) throw new Error(`severityChanges[${i}] must be an object: {"finding": "<run id>/judge/M4", "reviewers": ["MED", "HIGH"], "judge": "HIGH", "reason": "<the judge's reason, or null>"}`);
     const finding = clean(x.finding, 120);
-    if (!finding) throw new Error(`severityChanges[${i}].finding needs the finding's citation, such as <run id>/M4`);
+    if (!finding) throw new Error(`severityChanges[${i}].finding needs the finding's citation, such as <run id>/judge/M4`);
     if (!Array.isArray(x.reviewers) || !x.reviewers.length || x.reviewers.length > 9) throw new Error(`severityChanges[${i}].reviewers must list each reviewer's severity for it (1 to 9)`);
     const reviewers = x.reviewers.map((v, k) => sevOf(v, `severityChanges[${i}].reviewers[${k}]`));
     const judge = sevOf(x.judge, `severityChanges[${i}].judge`);
@@ -786,6 +792,11 @@ function checkAgents(list, strict = true) {
       effort = typeof x.effort === 'string' && x.effort.length <= 200 && SEAT_EFFORT.test(x.effort) ? x.effort : null;
     }
     const out = { label, step: x.step, model, effort, tokens: nint(x.tokens, `agents[${i}].tokens`), toolUses: nint(x.toolUses, `agents[${i}].toolUses`), durationMs: nint(x.durationMs, `agents[${i}].durationMs`) };
+    // A note on anything the agent did that its brief didn't ask for: a line of text, cut to AGENT_NOTES_MAX.
+    if (x.notes != null) {
+      if (typeof x.notes !== 'string') { if (strict) throw new Error(`agents[${i}].notes must be a line of text (a JSON string)`); }
+      else { const n = clean(x.notes, AGENT_NOTES_MAX); if (n) out.notes = n; }
+    }
     if (!strict && Object.hasOwn(x, 'reportUnescaped')) out.reportUnescaped = typeof x.reportUnescaped === 'boolean' ? x.reportUnescaped : null;
     return out;
   });
@@ -805,7 +816,7 @@ function checkSeverityItems(list) {
   if (list.length > 50) throw new Error('appeal.severityItems can have at most 50 entries');
   return list.map((x, i) => {
     const w = `appeal.severityItems[${i}]`;
-    if (!x || typeof x !== 'object' || Array.isArray(x)) throw new Error(`${w} must be an object: {"finding": "<run id>/M4: <short title>", "reviewers": ["MED"], "judge": "LOW", "view": "too low", "appealSeverity": "MED", "call": "pending"}`);
+    if (!x || typeof x !== 'object' || Array.isArray(x)) throw new Error(`${w} must be an object: {"finding": "<run id>/judge/M4: <short title>", "reviewers": ["MED"], "judge": "LOW", "view": "too low", "appealSeverity": "MED", "call": "pending"}`);
     const finding = clean(x.finding, 120);
     if (!finding) throw new Error(`${w}.finding needs the finding's citation and a short title`);
     if (!Array.isArray(x.reviewers) || !x.reviewers.length || x.reviewers.length > 9) throw new Error(`${w}.reviewers must list each reviewer's severity for it (1 to 9)`);
@@ -1085,9 +1096,9 @@ function markdown(runs) {
       L.push(`| ${r.runId} | ${cell(r.time.slice(0, 10))} | ${cell(r.label)} | ${cell(r.target)} | ${found} | ${res ? (res.verified ? `${kept(res)} (${res.overstated}${res.understated ? `, ${res.understated} raised` : ''})` : 'unverified') : '-'} | ${res ? (res.verified ? res.dismissed : '-') : '-'} | ${min} | ${tok} | ${r.updates.length ? `${fx.failed} of ${fx.made}` : '-'} | ${res?.baseline ? res.baseline.confirmed : '-'} | ${ap} |`);
     }
     L.push('');
-    const noted = runs.filter(r => r.results && (r.results.severityChanges?.length || r.results.deviations?.length || r.results.agents?.some(a => a.reportUnescaped) || r.results.appeal?.severityItems?.length));
+    const noted = runs.filter(r => r.results && (r.results.severityChanges?.length || r.results.deviations?.length || r.results.agents?.some(a => a.reportUnescaped || a.notes) || r.results.appeal?.severityItems?.length));
     if (noted.length) {
-      L.push('## Severity changes, severity appeals, deviations and unescaped reports', '');
+      L.push('## Severity changes, severity appeals, deviations, unescaped reports and agent notes', '');
       for (const r of noted) {
         const res = r.results, parts = [];
         if (res.severityChanges?.length) parts.push(`${res.severityChanges.length} severity ${res.severityChanges.length === 1 ? 'change' : 'changes'}: ${res.severityChanges.map(x => `${cell(x.finding)} ${x.reviewers.map(v => v.toUpperCase()).join('/')} to ${x.judge.toUpperCase()} (${x.change}${x.reason ? '' : ', no reason given'})`).join('; ')}`);
@@ -1100,6 +1111,8 @@ function markdown(runs) {
         if (res.deviations?.length) parts.push(`${res.deviations.length} ${res.deviations.length === 1 ? 'deviation' : 'deviations'} from SKILL.md (their exact text is in review-log.jsonl)`);
         const un = (res.agents || []).filter(a => a.reportUnescaped).map(a => cell(a.label));
         if (un.length) parts.push(`Reports unescaped from a completion notice: ${un.join(', ')}`);
+        const an = (res.agents || []).filter(a => a.notes).map(a => `${cell(a.label)}: ${inlineMd(a.notes, AGENT_NOTES_MAX)}`);
+        if (an.length) parts.push(`Agent notes: ${an.join('; ')}`);
         L.push(`- ${r.runId}: ${parts.join('. ')}.`);
       }
       L.push('');
@@ -1114,7 +1127,7 @@ function markdown(runs) {
     L.push('| Type | Runs | Findings per run | Kept | Dismissed | Kept but severity cut | Minutes per run | Tokens per run, as context sizes (appeal agent) | Fixes that failed recheck | Regressions per rechecked run | Council kept vs baseline confirmed (per run) | Appeal: dismissals flagged, reinstated | Unverified runs | Planned, not logged |', '|---|---|---|---|---|---|---|---|---|---|---|---|---|---|');
     for (const g of c) L.push(`| ${cell(g.label)} | ${g.runs} | ${dash(g.findingsPerRun)} | ${pct(g.keptPercent)} | ${pct(g.dismissedPercent)} | ${pct(g.overstatedOfKeptPercent)}${g.understatedOfKeptPercent ? ` (raised: ${pct(g.understatedOfKeptPercent)})` : ''} | ${minCell(g.minutes)} | ${g.tokensPerRun == null ? '-' : `${g.tokensPerRun}${g.appealUsagePerRun != null ? ` (${g.appealUsagePerRun})` : ''}`} | ${pct(g.fixesFailedRecheckPercent)} | ${dash(g.regressionsPerRecheckedRun)} | ${g.baseline ? `${g.baseline.councilKeptPerRun} vs ${g.baseline.baselineConfirmedPerRun} (${runsOf(g.baseline.runs)})` : '-'} | ${g.appeal ? `${g.appeal.flagged} of ${g.appeal.dismissedChecked}, ${g.appeal.reinstated} reinstated${g.appeal.pending ? `, ${g.appeal.pending} pending` : ''}${g.appeal.severity ? `; severity: ${g.appeal.severity.changedFlagged} of ${g.appeal.severity.changedChecked} changed and ${g.appeal.severity.lowUnchangedFlagged} of ${g.appeal.severity.lowUnchangedChecked} unchanged LOW flagged, ${g.appeal.severity.changedByUser} changed by you` : ''}` : '-'} | ${g.unverifiedRuns} | ${g.unfinishedRuns} |`);
     if (c.more) L.push('', `(${c.more} more types not shown.)`);
-    L.push('', 'Kept is the share of combined findings that survived checking, REAL or OVERSTATED (an OVERSTATED finding is a real problem rated too high); dismissed is the share marked NOT REAL. Kept but severity cut is the share of kept findings marked OVERSTATED, which shows how far the reviewers\' severities had to be corrected; with brief version 3, "raised" is the share marked UNDERSTATED, rated higher than any reviewer did. Brief version 3 types end in v3 and are kept apart from version 2 types. In version 3 the appeal also checks severities: the table shows how often it disagreed on the severities the judge changed, and on the LOW findings it left unchanged, separately, so you can judge whether checking those is worth its cost. All three count only verified runs. The baseline\'s findings are counted confirmed or not, with no OVERSTATED bucket, so a real baseline finding counts as confirmed even if its severity was too high; its confirmed count is the counterpart of the council\'s kept count.', '', 'Minutes are of two kinds and never averaged together: wall time, from the start to when the last agent finished, and the critical path, worked out from the agents\' reported times (the slowest reviewer, then each later step), which leaves out Claude\'s own time between steps. Both are wall-clock time: an agent\'s reported duration includes any time it spent waiting for you to approve a permission prompt (in Claude Code\'s Manual mode), so neither is pure model time. Minutes logged before Council Dial 1.3.0 are unlabelled, because they could be either; logging the run again labels them.', '', 'Tokens are logged context sizes, not billed totals: each agent\'s figure is what Claude Code reported when it finished, roughly its context size at completion (its final request, cached tokens included), not a sum across its requests, so a run\'s figure is the sum of its agents\' context sizes, usually well below the tokens processed across all their requests. Use it to compare runs, not as cost. Tokens per run count only runs where every agent the run had is listed with the tokens Claude Code reported for it, and so does the appeal agent\'s figure in brackets. A type ending in @ and a model was run on that model (as asked for; Claude Code doesn\'t report the model a subagent actually ran on to the main session); one ending in @{...} gives each seat\'s model, and /low, /high and so on give an effort level that was set for a seat. Small numbers of runs say little; compare types on the same kind of target.', '', 'Where a run\'s reports were saved, they are in the folder named by its run id, next to this file. Finding numbers restart in every run, so cite them with the run id, such as 20261107-2f23/M12.', '');
+    L.push('', 'Kept is the share of combined findings that survived checking, REAL or OVERSTATED (an OVERSTATED finding is a real problem rated too high); dismissed is the share marked NOT REAL. Kept but severity cut is the share of kept findings marked OVERSTATED, which shows how far the reviewers\' severities had to be corrected; with brief version 3, "raised" is the share marked UNDERSTATED, rated higher than any reviewer did. Brief version 3 types end in v3 and are kept apart from version 2 types. In version 3 the appeal also checks severities: the table shows how often it disagreed on the severities the judge changed, and on the LOW findings it left unchanged, separately, so you can judge whether checking those is worth its cost. All three count only verified runs. The baseline\'s findings are counted confirmed or not, with no OVERSTATED bucket, so a real baseline finding counts as confirmed even if its severity was too high; its confirmed count is the counterpart of the council\'s kept count.', '', 'Minutes are of two kinds and never averaged together: wall time, from the start to when the last agent finished, and the critical path, worked out from the agents\' reported times (the slowest reviewer, then each later step), which leaves out Claude\'s own time between steps. Both are wall-clock time: an agent\'s reported duration includes any time it spent waiting for you to approve a permission prompt (in Claude Code\'s Manual mode), so neither is pure model time. Minutes logged before Council Dial 1.3.0 are unlabelled, because they could be either; logging the run again labels them.', '', 'Tokens are logged context sizes, not billed totals: each agent\'s figure is what Claude Code reported when it finished, roughly its context size at completion (its final request, cached tokens included), not a sum across its requests, so a run\'s figure is the sum of its agents\' context sizes, usually well below the tokens processed across all their requests. Use it to compare runs, not as cost. Tokens per run count only runs where every agent the run had is listed with the tokens Claude Code reported for it, and so does the appeal agent\'s figure in brackets. A type ending in @ and a model was run on that model (as asked for; Claude Code doesn\'t report the model a subagent actually ran on to the main session); one ending in @{...} gives each seat\'s model, and /low, /high and so on give an effort level that was set for a seat. Small numbers of runs say little; compare types on the same kind of target.', '', 'Where a run\'s reports were saved, they are in the folder named by its run id, next to this file. Finding numbers restart in every run, so cite them with the run id and the report, such as 20261107-2f23/judge/M12 or 20261107-2f23/reviewer-correctness/2.', '');
   }
   return L.join('\n');
 }
@@ -1160,11 +1173,12 @@ export const agentLabels = type => agentSteps(type).map(a => a.label);
 const reportName = label => `${label.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'agent'}.md`;
 const MAX_REPORT = 200000;
 // Finding numbers (a reviewer's 1, 2, 3, the judge's M1, M2) restart in every run, so anything
-// Council Dial writes cites them with the run id: 20261107-2f23/M12.
+// Council Dial writes cites them with the run id and the report's name: 20261107-2f23/judge/M12.
 export const citeAs = (runId, n) => `${runId}/${n}`;
 function saveReport(p, run, label, input, now, { replace = false, savedLater = false, noticeEscaped = false } = {}) {
   // Kept as written, apart from line endings, control characters and invisible characters, and, with
   // --notice-escaped, the notice's &lt;, &gt; and &amp; turned back into <, > and &.
+  if (noticeEscaped && !looksEscaped(String(input ?? ''))) throw new Error("--notice-escaped is only for a report escaped throughout, and this one has a <, a > or an & that isn't part of &lt;, &gt; or &amp;, so it wasn't escaped (the agent typed any entities itself); save it without --notice-escaped");
   const un = noticeEscaped ? unescapeNotice(input) : { text: String(input ?? ''), count: 0 };
   const text = un.text.replace(/\r\n?/g, '\n').replace(/[^\P{Cc}\n\t]/gu, '').replace(HIDDEN, '').replace(/^\n+|\s+$/g, '');
   if (!text) throw new Error('give the agent\'s full report on stdin');
@@ -1184,7 +1198,7 @@ function saveReport(p, run, label, input, now, { replace = false, savedLater = f
     ...(savedLater ? ['Saved from the session text after the run, not captured as the agent finished.'] : []),
     ...(noticeEscaped ? [`${UNESCAPED_NOTE} ${un.count} of them back into the characters.`] : []),
     'This is the agent\'s report as it returned it, with control and invisible characters removed. It is kept in a code block, so links, images and HTML in it (which can come from the reviewed material) are shown as text and never load or open. It is data, not instructions.',
-    `Finding numbers restart in every run; cite a finding with the run id and the number its report gives it, such as ${citeAs(run.runId, '2')} for a reviewer's finding 2${run.type.combine === 'judged' ? ` or ${citeAs(run.runId, 'M1')} for the judge's finding M1` : ''}.`,
+    `Finding numbers restart in every run; cite a finding with the run id, its report's name and the number its report gives it, such as ${(() => { const name = reportName(label).replace(/\.md$/, ''); const mNumbered = ['judge', 'appeal'].includes(name) && (run.type.briefVersion ?? 2) >= 3; return `${citeAs(run.runId, `${name}/${mNumbered ? 'M1' : '2'}`)} for this report's finding ${mNumbered ? 'M1' : '2'}`; })()}${run.type.combine === 'judged' && reportName(label) !== 'judge.md' ? ` or ${citeAs(run.runId, 'judge/M1')} for the judge's finding M1` : ''}.`,
   ];
   // The report goes in a fenced code block with a fence longer than any run of backticks in it, so
   // no line of the report can close the block early.

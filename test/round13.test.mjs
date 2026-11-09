@@ -107,7 +107,7 @@ test('report warns when a report looks escaped but --notice-escaped wasn\'t give
 
 test('SKILL.md says when to pass --notice-escaped, and to pass reports on with the characters turned back', () => {
   const s = read('plugin/skills/council-dial/SKILL.md');
-  assert.match(s, /when the notice escaped it, add `--notice-escaped`: `report` turns those three back into the characters, says so in the saved report, and `log` records it for that agent/);
+  assert.match(s, /when the notice escaped it, add `--notice-escaped`\. An agent can also type `&gt;` on purpose, such as in a code span, so treat a notice as escaped only if the report has at least one `&lt;`, `&gt;` or `&amp;`, and no `<`, no `>` and no `&` that isn't the start of one of those three: a notice that escapes does so throughout\. With `--notice-escaped`, `report` turns those three back into the characters, says so in the saved report, and `log` records it for that agent/);
   assert.match(s, /Whenever you pass a report to another agent, give it with those characters turned back/);
 });
 
