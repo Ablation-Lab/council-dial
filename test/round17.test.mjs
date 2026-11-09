@@ -49,7 +49,7 @@ liteTest('SKILL.md: raw mode is opt-in, drops only the check agent, is labelled 
   assert.match(skill, /- \*\*Raw mode:\*\* only if the user asks for a raw run\./);
   assert.match(skill, /A raw run has one agent fewer than the same type otherwise would \(no check\); say so when you count\. Its label has `\+raw` after the other extras/);
   assert.match(skill, /`\+debate`, `\+sequential`, `\+appeal` and `\+raw` for each one the run has, in that order\. A run logged before Lite 1\.6\.0 has no `type\.raw`, and isn't raw\./);
-  assert.match(skill, /`lite: specialised-3\/judged\+appeal\+raw v3 @claude-opus-5-5 \(Lite 1\.10\.0\)`/);
+  assert.match(skill, /`lite: specialised-3\/judged\+appeal\+raw v3 @claude-opus-5-5 \(Lite 1\.10\.1\)`/);
   assert.match(skill, /\| check \| always, except in a raw run \| `check` \|/);
   assert.match(skill, /Read `\$\{CLAUDE_SKILL_DIR\}\/check-brief\.md` first \(in a raw run, `\$\{CLAUDE_SKILL_DIR\}\/raw-handoff\.md`\), before any file in `briefs\/`\./);
 
