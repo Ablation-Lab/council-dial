@@ -81,6 +81,8 @@ liteTest('holds only Markdown, JSON, the licence, plain repository files and the
     ...['appeal', 'baseline', 'debate', 'judge', 'reviewer', 'shared'].map(b => `skills/council-dial-lite/briefs/${b}.md`),
     ...['appeal', 'judge', 'shared'].map(b => `skills/council-dial-lite/briefs/v3/${b}.md`),
     'skills/council-dial-lite/check-brief.md',
+    // Lite 1.6.0: the raw run's hand-off template.
+    'skills/council-dial-lite/raw-handoff.md',
   ].sort());
   for (const f of files) {
     const b = fs.readFileSync(f);
@@ -202,7 +204,7 @@ liteTest('SKILL.md keeps reports saved by their agents and checked, findings cop
   assert.match(skill, /First go back through sections 1 to 6 and add to `deviations` anything you did differently that isn't logged yet\./);
   assert.match(skill, /as a step of its own before that agent's Agent call, compare the brief with the template texts it came from/);
   assert.match(skill, /Read the template files the run needs, by name, without listing the folder first/);
-  assert.match(skill, /`appeal`: `null` when the type has no appeal .*? When the judge marked nothing NOT REAL, it's `\{"ran": false, "reviewed": 0, "items": \[\]\}`/);
+  assert.match(skill, /`appeal`: `null` when the type has no appeal .*? When the appeal didn't run \(in version 2, because the judge marked nothing NOT REAL; in version 3, because there was also no severity to check\), it's `\{"ran": false, "reviewed": 0, "items": \[\]\}`/);
   assert.match(skill, /`baseline`: `null` when the type has no baseline\./);
   assert.match(skill, /with a baseline, take the larger of that sum and the baseline's own duration/);
   assert.match(skill, /name the latest 5 of them by planned date and then run id, or all of them if there are fewer; the estimate still uses every run that counts/);
@@ -289,7 +291,7 @@ liteTest('Lite 1.1.2 takes on what the appeal stress-test run showed, where it a
 
 liteTest('Lite 1.2.0 sets a model and an effort per seat with the Agent tool\'s parameters, labels mixed councils by seat, and keeps the blind agents blind', () => {
   const skill = readLite('skills/council-dial-lite/SKILL.md');
-  assert.match(skill, /- \*\*Seats:\*\* every agent sits in a seat: each reviewer \(named by its role, or `reviewer <k>` for generalists\), the judge, the appeal, the baseline reviewer and the check\. A reviewer's debate turn sits in its reviewer's seat\./);
+  assert.match(skill, /- \*\*Seats:\*\* every agent sits in a seat: each reviewer \(named by its role, or `reviewer <k>` for generalists\), the judge, the appeal, the baseline reviewer and the check \(not in a raw run\)\. A reviewer's debate turn sits in its reviewer's seat\./);
   assert.match(skill, /For each seat, its own choice wins, then one for all reviewers \(for a reviewer's seat\), then one for every subagent\. Pass the seat's model as the Agent tool's `model` on its agents' calls/);
   assert.match(skill, /Pass it as the Agent tool's `effort` parameter, the per-call route Claude Code supports \(2\.1\.292 or later\); leave it out for a seat with none\./);
   // Lite can't read CLAUDE_CODE_EFFORT_LEVEL (its shell is for the link check only), so it says so and tells the user how to check.

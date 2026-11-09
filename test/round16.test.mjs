@@ -28,7 +28,12 @@ const layoutOf = skill => {
   return m[1].split('\n').map(l => l.trim());
 };
 
-const checkLayout = skill => {
+const checkLayout = (skill, sectionNo) => {
+  // The layout sits in section 4 ("Run the steps"), where the appeal's blocks are built.
+  const s4 = skill.slice(skill.indexOf('\n## 4. '), skill.indexOf('\n## 5. '));
+  assert.ok(s4.includes('Lay out each severity item exactly like this'), 'the layout is in section 4');
+  assert.ok(s4.includes(`It doesn't count as giving a severity (section ${sectionNo}).`), `the layout points to section ${sectionNo}`);
+  assert.ok(s4.includes(`the judge's reason as section ${sectionNo} defines it`), `the reason points to section ${sectionNo}`);
   const lines = layoutOf(skill);
   assert.equal(lines.length, LABELS.length);
   LABELS.forEach((label, i) => assert.ok(lines[i].startsWith(label), `line ${i + 1} should start "${label}": ${lines[i]}`));
@@ -37,13 +42,17 @@ const checkLayout = skill => {
   assert.match(skill, /copied exactly inside straight double quotes, or the words `no reason given` with no quotes/);
 };
 
-const checkRules = skill => {
+const checkRules = (skill, sectionNo) => {
+  // The rules sit in the section the layout points to.
+  const at = skill.indexOf(`\n## ${sectionNo}. `);
+  const sec = skill.slice(at, skill.indexOf('\n## ', at + 4));
+  assert.ok(sec.includes("**What counts as the judge's reason.**") && sec.includes('**Which reviewers gave a severity.**'), `the rules are in section ${sectionNo}`);
   // The judge's reason: only words that explain the severity; the ruling's own text isn't one.
   assert.match(skill, /\*\*What counts as the judge's reason\.\*\* Only the words in which the judge says why the finding has its severity/);
   assert.match(skill, /The rest of the ruling \(what the judge checked, whether the claim holds, which part doesn't\) isn't a reason for the severity, even when it's all the ruling says; then the reason is "no reason given"\./);
   // Side-remark reviewers don't count as giving a severity.
   assert.match(skill, /\*\*Which reviewers gave a severity\.\*\* A reviewer seat counts only if the judge lists it with a severity of its own for that finding\./);
-  assert.match(skill, /`reviewers` holds only the seats that gave a severity, as section \d says \(a side-remark seat is left out\)/);
+  assert.ok(skill.includes(`\`reviewers\` holds only the seats that gave a severity, as section ${sectionNo} says (a side-remark seat is left out)`));
   // Appeal counts come from the verdicts it lists.
   assert.match(skill, /from the verdicts the appeal's report lists, never from its own count line/);
   // Tokens are context sizes.
@@ -53,8 +62,16 @@ const checkRules = skill => {
 
 test('full edition: the severity block has one fixed layout, and the reason, side-remark and count rules are stated', () => {
   const skill = FULL_SKILL();
-  checkLayout(skill);
-  checkRules(skill);
+  checkLayout(skill, 5);
+  checkRules(skill, 5);
+  // A version 3 appeal that checked only severities still ran.
+  assert.match(skill, /so a version 3 appeal that checked only severities ran, with `reviewed` 0/);
+});
+
+test("full edition: the estimate note says when the appeal runs, by brief version", () => {
+  const src = read('plugin/skills/council-dial/scripts/council.mjs');
+  assert.match(src, /which runs if the judge throws a finding out or there's a severity to check \(a changed severity, or a finding kept at LOW\), so in nearly every judged council\./);
+  assert.match(src, /which runs only if the judge throws a finding out\./);
 });
 
 test("full edition: the plan's appeal step points to SKILL.md's layout", () => {
@@ -108,8 +125,10 @@ liteTest('the manifest description says Claude saves the reports, not the agents
 
 liteTest('SKILL.md: the severity block layout, the reason, side-remark and count rules, and the material rule', () => {
   const skill = LITE_SKILL();
-  checkLayout(skill);
-  checkRules(skill);
+  checkLayout(skill, 7);
+  checkRules(skill, 7);
+  assert.match(skill, /A version 3 appeal that checked only severities ran: `ran` is `true` and `reviewed` is 0\./);
+  assert.match(skill, /Use file names only as paths: copy nothing else from them into the description\./);
   assert.match(skill, /\*\*Don't read the material before the briefs are written\.\*\* Until you've written the reviewers' briefs \(and the baseline's\), don't open the material's files\. To agree the one-line description, only list them \(with Glob\)/);
 });
 

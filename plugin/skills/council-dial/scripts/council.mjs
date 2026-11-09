@@ -40,7 +40,7 @@ export const VERSION = 3;
 export const BRIEF_VERSIONS = [2, 3];
 // Council Dial's own version, recorded with each plan so a run's setup can be rebuilt exactly. Keep it
 // equal to the plugin manifest's version (a test checks).
-export const PLUGIN_VERSION = '1.5.2';
+export const PLUGIN_VERSION = '1.5.3';
 const COMMANDS = ['plan', 'estimate', 'log', 'update', 'report', 'setup', 'list', 'compare'];
 // The description of what's reviewed is kept at this length when planned and when read back.
 export const TARGET_MAX = 600;
@@ -1033,7 +1033,9 @@ export function estimateOf(runs, type, label) {
   if (logged.length > counted.length) notes.push(`${logged.length - counted.length} other logged ${logged.length - counted.length === 1 ? 'run' : 'runs'} of this type ${logged.length - counted.length === 1 ? 'is' : 'are'} left out because not every agent's tokens were reported.`);
   notes.push('Bigger material costs more: every reviewer reads all of it (and debate agents and the judge also read every report), so material larger than those runs reviewed (see basedOn) uses more tokens than this.');
   if (counted.length) notes.push(`If the material looks large, suggest ${trial}.`);
-  if (type.appeal) notes.push(`${agentCount} agents counts the appeal agent, which runs only if the judge throws a finding out.`);
+  if (type.appeal) notes.push((type.briefVersion ?? VERSION) >= 3
+    ? `${agentCount} agents counts the appeal agent, which runs if the judge throws a finding out or there's a severity to check (a changed severity, or a finding kept at LOW), so in nearly every judged council.`
+    : `${agentCount} agents counts the appeal agent, which runs only if the judge throws a finding out.`);
   notes.push(`These are logged context sizes, not billed tokens: each subagent's figure is what Claude Code reported when it finished, which its monitoring docs describe as roughly the subagent's context size at completion (its final request, cached tokens included), not a sum across its requests. Compare runs with them; don't read them as cost. Council Dial gives no prices.`);
   return {
     label, agentCount, tokens, loggedRuns: logged.length, trialSuggested: !counted.length,

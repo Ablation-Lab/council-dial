@@ -32,7 +32,7 @@ Figures that couldn't be captured are marked **missing**, never estimated.
 
 ## 2. Agents: findings, tokens, tool uses and time
 
-The tokens, tool uses and times are what Claude Code reported in each subagent's completion notice (`subagent_tokens`, `tool_uses`, `duration_ms`). That notice isn't a documented format, it doesn't say whether cached tokens count, and it has no input/output split or cost. **Missing for both runs:** input, output and cached tokens, and cost. **Read the token figures as context sizes:** Claude Code's monitoring docs describe a finished subagent's token figure as roughly its context size at completion (its final request, cached tokens included), not a sum across its requests, so these are logged context sizes, not billed totals (added with Council Dial 1.5.2).
+The tokens, tool uses and times are what Claude Code reported in each subagent's completion notice (`subagent_tokens`, `tool_uses`, `duration_ms`). That notice isn't a documented format, it doesn't itself say whether cached tokens count, and it has no input/output split or cost. **Missing for both runs:** input, output and cached tokens, and cost. **Read the token figures as context sizes:** Claude Code's monitoring docs describe a finished subagent's token figure as roughly its context size at completion (its final request, cached tokens included), not a sum across its requests, so these are logged context sizes, not billed totals (added with Council Dial 1.5.2).
 
 ### Run 1: `20261107-f675`
 
