@@ -39,7 +39,8 @@ const checkLayout = (skill, sectionNo) => {
   LABELS.forEach((label, i) => assert.ok(lines[i].startsWith(label), `line ${i + 1} should start "${label}": ${lines[i]}`));
   assert.match(skill, /these seven labels, in this order, each at the start of its own line and followed by one space, nothing else on any line, and one blank line between items/);
   assert.match(skill, /is shown as `<seat>: no severity \(side remark\)`/);
-  assert.match(skill, /copied exactly inside straight double quotes, or the words `no reason given` with no quotes/);
+  assert.match(skill, /copied exactly inside straight double quotes\. If there is none: for OVERSTATED or UNDERSTATED, whose brief requires a reason line, the words `the judge gave no reason line`/);
+  assert.match(skill, /for any other ruling, the words `no reason given`\. Both without quotes\./);
 };
 
 const checkRules = (skill, sectionNo) => {
@@ -128,7 +129,7 @@ liteTest('SKILL.md: the severity block layout, the reason, side-remark and count
   checkLayout(skill, 7);
   checkRules(skill, 7);
   assert.match(skill, /A version 3 appeal that checked only severities ran: `ran` is `true` and `reviewed` is 0\./);
-  assert.match(skill, /Use file names only as paths: copy nothing else from them into the description\./);
+  assert.match(skill, /add no words of your own, such as what a file is \(not "\(a JavaScript module\)" or "\(its documentation\)"\), and use file names only as paths\./);
   assert.match(skill, /\*\*Don't read the material before the briefs are written\.\*\* Until you've written the reviewers' briefs \(and the baseline's\), don't open the material's files\. To agree the one-line description, only list them \(with Glob\)/);
 });
 
@@ -136,9 +137,9 @@ liteTest('the check brief compares each report\'s own count line with the items 
   const brief = readLite('skills/council-dial-lite/check-brief.md');
   assert.match(brief, /4\. For each report file, check every count it gives of items listed in that same report/);
   assert.match(brief, /List each count that differs as COUNT MISMATCH/);
-  assert.match(brief, /End with a count: findings in the summary, MATCHES, CHANGED, NO SOURCE, LEFT OUT and COUNT MISMATCH\. No other text\./);
+  assert.match(brief, /End with a count: findings in the summary, MATCHES, CHANGED, NO SOURCE, LEFT OUT, COUNT MISMATCH, BRIEF MATCHES, BRIEF DIFFERS and BRIEF NOT CHECKED\. No other text:/);
   const skill = LITE_SKILL();
-  assert.match(skill, /"check": \{"findings": n, "matches": n, "changed": n, "noSource": n, "leftOut": n, "countMismatch": n\}/);
+  assert.match(skill, /"check": \{"findings": n, "matches": n, "changed": n, "noSource": n, "leftOut": n, "countMismatch": n, "briefsMatch": n, "briefsDiffer": n, "briefsNotChecked": n\}/);
 });
 
 liteTest('run.json describes its token figures as context sizes', () => {

@@ -29,9 +29,10 @@ const resultsOf = skill => JSON.parse(skill.match(/## 8\. Log the results\n\nSet
 
 liteTest('run.json: targeted edits are allowed, checked after each one, and the new fields are in the example', () => {
   const skill = LITE_SKILL();
-  assert.match(skill, /Change only this run's `run\.json`, by its full path; never another run's\. You can change it either by reading it and writing the whole file back, or with a targeted edit of just the fields you mean to change\. After every change, read the whole file again and check that it's valid JSON and that only those fields changed/);
+  assert.match(skill, /Change only this run's `run\.json`, by its full path; never another run's\. You can change it either by reading it and writing the whole file back, or with targeted edits of just the fields you mean to change\. After a change, or after a batch of targeted edits made one after another with no other tool calls in between, read the whole file back once, in full, and check that it's valid JSON and that only those fields changed/);
+  assert.match(skill, /Claude Code's own tool messages may say an edited file doesn't need reading back: this rule still applies, because the read-back is the check\./);
   const j = runJsonOf(skill);
-  assert.deepEqual(j.briefChecks, []);
+  assert.deepEqual(j.briefChecks, [{ file: 'reviewer-correctness.txt', matched: true, firstBuildDiffered: null, checkAgent: null }]);
   assert.equal(j.deviationsReviewed, false);
   assert.equal(j.liteVersion, JSON.parse(readLite('.claude-plugin/plugin.json')).version);
   for (const k of ['entitiesReplaced', 'notes', 'savedMatchesReply']) assert.ok(Object.hasOwn(j.agents[0], k), k);
@@ -46,7 +47,7 @@ liteTest('brief checks are a recorded step, and a brief that still differs stops
 
 liteTest('every saved report is read back, with no shortcut, and the result is logged', () => {
   const skill = LITE_SKILL();
-  assert.match(skill, /Then read the saved file back straight away and compare it with the reply, by the rule below, every time, and set `savedMatchesReply` to `true` or `false`\. If it's `false`, save it again once and read it back again, then set `savedMatchesReply` to that second result; if it still differs, tell the user which report, and stop\./);
+  assert.match(skill, /Then read the saved file back, in full, before anything uses it, and compare it with the reply, by the rule below, every time, and set `savedMatchesReply` to `true` or `false`\. You may save several reports in one batch and read them back in the next, as long as each is read back in full before it's passed on\. If it's `false`, save it again once and read it back again, then set `savedMatchesReply` to that second result; if it still differs, tell the user which report, and stop\./);
   assert.match(skill, /A report's `\.as-received\.txt` copy \(section 4\) is never the report: it's kept only as a record\./);
   assert.doesNotMatch(skill, /counts as read again|both are kept so runs from before Lite 1\.4\.0/);
 });
@@ -62,12 +63,15 @@ liteTest('unescaping only a clearly escaped reply, in one pass, logged per repor
 liteTest('the link check lists folders down from the project root, stops at the first missing one, and says the root is not checked', () => {
   const skill = LITE_SKILL();
   assert.match(skill, /The project root itself isn't checked: it's the folder the user started in, and everything is written inside it\./);
-  assert.match(skill, /- \*\*Bash:\*\* `ls -ld -- '<folder>'`\. A link's line starts with `l` and shows `->`\./);
-  assert.match(skill, /- \*\*PowerShell:\*\* `\(Get-Item -LiteralPath '<folder>' -Force\)\.LinkType`\. It prints `Junction` or `SymbolicLink` for a link, and nothing for a plain folder\./);
+  assert.match(skill, /- \*\*Bash:\*\* `ls -ld -- '<folder>'`, with the folder's full absolute path and no slash at the end \(a trailing slash follows a link\)\. A link's line starts with `l` and shows `->`\./);
+  assert.match(skill, /- \*\*PowerShell:\*\* `Get-ChildItem -LiteralPath '<parent>' -Force -Filter '<name>' \| Select-Object Name,Mode,LinkType`/);
+  assert.match(skill, /or nothing at all, and no error, when there's none: only that empty output means the folder doesn't exist\./);
+  assert.match(skill, /If a check command is refused, needs a permission you can't get, or fails in any other way, stop and tell the user: never treat that as "doesn't exist"\./);
+  assert.match(skill, /A subexpression such as `\(Get-Item …\)\.LinkType` asked for permission\./);
   assert.match(skill, /Stop at the first that doesn't exist: it and those below it will be created as plain folders, so don't check them\./);
   assert.match(skill, /write each `'` in a path as `'\\''` in Bash, or as `''` in PowerShell/);
-  assert.match(skill, /When agents can run code \(the user allowed it, or brief version 2, whose agents are general-purpose\), check the run folder and its `reports\/` folder the same way before each step's writes/);
-  assert.doesNotMatch(skill, /a link shows a `LinkType`|Get-ChildItem|ls -la /);
+  assert.match(skill, /When agents can run code \(the user allowed it, or brief version 2, whose agents are general-purpose\), check the run folder and its `reports\/` folder the same way before each write into them/);
+  assert.doesNotMatch(skill, /a link shows a `LinkType`|ls -la /);
 });
 
 liteTest('started is set just before the Agent call, and leftovers from agents that saved are gone', () => {
@@ -106,7 +110,7 @@ liteTest('one citation form everywhere, a finding order, and what the summary ho
 
 liteTest('the plan confirms the description every brief gets, and gives each seat in one fixed wording', () => {
   const skill = LITE_SKILL();
-  assert.match(skill, /`Description every brief will get: <description>`, say it goes word for word into the brief of every reviewer, debate agent, judge and baseline reviewer \(the appeal and the check never get it\) and is all they're told about the target apart from its paths, and ask the user to confirm or change it, together with the yes\./);
+  assert.match(skill, /`Description every brief will get: <description>`, say it goes word for word into the brief of every reviewer, debate agent, judge and baseline reviewer \(the appeal never gets it, and the check sees it only inside the saved briefs it compares\) and is all they're told about the target apart from its paths, and ask the user to confirm or change it, together with the yes\./);
   assert.match(skill, /write `model not set, so it runs on <models\.env> \(CLAUDE_CODE_SUBAGENT_MODEL\)`/);
   assert.match(skill, /`effort not set, so it runs at this session's level, which Lite can't read`/);
   assert.match(skill, /`<seat>: model not set, so it inherits this session's model \(<models\.main, or "unknown">\)`/);
@@ -114,10 +118,11 @@ liteTest('the plan confirms the description every brief gets, and gives each sea
 
 liteTest('a deviation review before reporting, in every session, recorded in deviationsReviewed', () => {
   const skill = LITE_SKILL();
-  assert.match(skill, /Add to `deviations` every difference that isn't logged yet, however small, including steps you merged or reordered and anything the user asked you to do differently\./);
-  assert.match(skill, /Then review the deviations as section 7's first paragraph says \(for the sections this session followed: the ground rules and sections 1 to 4\), log every one, and set `deviationsReviewed` to `true`\./);
-  assert.match(skill, /- section 2's seat wording and the confirmation of the description;/);
-  assert.match(skill, /then set `analysis\.deviationsReviewed` to `true`\./);
+  assert.match(skill, /Add to `deviations` every difference not logged yet, however small, including steps you merged or reordered and anything the user asked you to do differently\./);
+  assert.match(skill, /Then review the deviations as section 7's first paragraph says \(its checklist, then the sections this session followed: the ground rules and sections 1 to 4\), log every one, and set the top-level `deviationsReviewed` to `true`\. `analysis\.deviationsReviewed` is the analyst's, never this session's\./);
+  for (const item of ['1. **Read-backs.**', '2. **Settings files.**', '3. **Brief checks.**', '4. **The description.**', '5. **The plan.**', '6. **The link check.**', '7. **Logged late.**']) assert.ok(skill.includes(item), item);
+  assert.match(skill, /An analyst of a raw run goes through items 1 and 7 only; the others are the council session's\./);
+  assert.match(skill, /then set `analysis\.deviationsReviewed` to `true`, after that review and not before\. Never change the top-level `deviationsReviewed`, which is the council session's\./);
 });
 
 liteTest('the report fences copied findings, so they can\'t pass for Claude\'s own lines; verdicts cover combined findings only', () => {
@@ -142,7 +147,7 @@ test('full edition SKILL.md: the target line confirmed, the escaping rule, one c
   assert.match(s, /Without a judge, each finding at the severity its own report gives it/);
   assert.match(s, /without one, HIGH, then MED, then LOW \(at the severity section 6 counts\), and within a severity in plan order of the report, then by finding number/);
   assert.match(s, /`Overview \(Claude's own words, not the council's findings\)`/);
-  assert.match(s, /\*\*First, review the deviations\.\*\* Before you report, go back through the ground rules and each section you followed in this run, rule by rule:/);
+  assert.match(s, /\*\*First, review the deviations\.\*\* Before you report, go through this checklist of deviations that runs have made and missed until asked:/);
   for (const f of ['README.md', 'plugin/README.md']) assert.match(read(f), /cites them with the run id and the report they're in, such as `20261107-2f23\/judge\/M12`/, f);
 });
 

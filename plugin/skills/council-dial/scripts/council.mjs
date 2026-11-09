@@ -40,7 +40,7 @@ export const VERSION = 3;
 export const BRIEF_VERSIONS = [2, 3];
 // Council Dial's own version, recorded with each plan so a run's setup can be rebuilt exactly. Keep it
 // equal to the plugin manifest's version (a test checks).
-export const PLUGIN_VERSION = '1.5.4';
+export const PLUGIN_VERSION = '1.5.5';
 const COMMANDS = ['plan', 'estimate', 'log', 'update', 'report', 'setup', 'list', 'compare'];
 // The description of what's reviewed is kept at this length when planned and when read back.
 export const TARGET_MAX = 600;
@@ -262,7 +262,7 @@ function appealBrief(v = VERSION) {
 const PRIMING = /\bplanted\b|\bseeded\s+(bugs?|problems?|errors?|flaws?|issues?|mistakes?|defects?)\b|\b(deliberate|intentional)(ly)?\b[^.]{0,40}\b(bugs?|problems?|errors?|flaws?|issues?|mistakes?|defects?)\b|\b(bugs?|problems?|errors?|flaws?|issues?|mistakes?|defects?)\b[^.]{0,40}\b(deliberate(ly)?|intentional(ly)?|on purpose)\b|\bon purpose\b|\bknown\s+(bugs|problems|errors|flaws|issues|mistakes|defects)\b|\b(answer key|expected findings)\b/i;
 export function checkTarget(t) {
   const m = t.match(PRIMING);
-  if (m) throw new Error(`the description of what to review says "${clean(m[0], 60)}"; describe the material only (what it is and where), not whether it has planted, deliberate or known problems, because that changes how the reviewers review it`);
+  if (m) throw new Error(`the description of what to review says "${clean(m[0], 60)}"; give the material's paths and anything out of scope, not whether it has planted, deliberate or known problems, because that changes how the reviewers review it`);
 }
 function baselineBrief(target, v = VERSION) {
   return fill(templates(v).baseline.brief, { ...shared(v), 'what-to-review': whatToReview(target, v) });
@@ -1040,7 +1040,7 @@ export function estimateOf(runs, type, label) {
     const all = counted.map(x => x.tokens);
     tokens = { perRun: Math.round(all.reduce((s, x) => s + x, 0) / all.length), low: Math.min(...all), high: Math.max(...all), runs: all.length };
     notes.push(`About ${tokens.perRun} tokens: the average of ${tokens.runs} logged ${tokens.runs === 1 ? 'run' : 'runs'} of ${label}${tokens.runs > 1 ? ` (${tokens.low} to ${tokens.high})` : ''}.${tokens.runs < 3 ? ' So few runs make this a very rough guide.' : ''}`);
-  } else notes.push(`No logged run of ${label} has every agent's tokens, so there's no estimate for it. Suggest ${trial}; its tokens then give a guide for the full run.`);
+  } else notes.push(`No logged run of ${label} has every agent's tokens, so there's no estimate for it. If the material is more than 5 files or a whole folder, or you can't tell how many files it covers, suggest ${trial}; its tokens then give a guide for the full run. For up to 5 named files, a trial isn't needed.`);
   if (logged.length > counted.length) notes.push(`${logged.length - counted.length} other logged ${logged.length - counted.length === 1 ? 'run' : 'runs'} of this type ${logged.length - counted.length === 1 ? 'is' : 'are'} left out because not every agent's tokens were reported.`);
   notes.push('Bigger material costs more: every reviewer reads all of it (and debate agents and the judge also read every report), so material larger than those runs reviewed (see basedOn) uses more tokens than this.');
   if (counted.length) notes.push(`If the material looks large, suggest ${trial}.`);

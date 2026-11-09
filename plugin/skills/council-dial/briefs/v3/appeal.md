@@ -4,7 +4,7 @@ In a judged council with the appeal step, the appeal agent gets this brief. It s
 
 After the brief come up to two blocks, each left out when it would be empty:
 - `<dismissed from="judge">`: every finding the judge marked NOT REAL, each with its title, file and line, what it claimed and the judge's reasons.
-- `<severity from="judge">`: every finding the judge ruled OVERSTATED or UNDERSTATED, and every other finding it kept at LOW. Each item gives the finding's number, title, file and line and what it claimed; each reviewer seat that raised it, with the severity it gave; the judge's severity; and the judge's reason, or "no reason given".
+- `<severity from="judge">`: every finding the judge ruled OVERSTATED or UNDERSTATED, and every other finding it kept at LOW. Each item gives the finding's number, title, file and line and what it claimed; each reviewer seat that raised it, with the severity it gave; the judge's severity; and the judge's reason, or "no reason given" ("the judge gave no reason line" when an OVERSTATED or UNDERSTATED ruling, whose brief requires a reason, has none).
 
 The appeal runs when either block has anything in it. Unlike version 2, it checks severities as well as dismissals.
 

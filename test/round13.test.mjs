@@ -174,7 +174,7 @@ test('severityChanges are checked, logged with the change worked out, and listed
 
 test('SKILL.md has Claude flag every severity change, up or down, and the judge brief is unchanged', () => {
   const s = read('plugin/skills/council-dial/SKILL.md');
-  assert.match(s, /For a judged run, first compare each merged finding's final severity with every reviewer's severity for it .*List every one that differs, up or down, including where reviewers disagreed and the judge took one of their ratings: its citation, each reviewer's severity, the judge's, and the judge's reason, quoted, if it gave one \(say "no reason given" if not\)\. Show this list to the user, and log it as `severityChanges`\./);
+  assert.match(s, /For a judged run, first compare each merged finding's final severity with every reviewer's severity for it .*List every one that differs, up or down, including where reviewers disagreed and the judge took one of their ratings: its citation, each reviewer's severity, the judge's, and the judge's reason, quoted, if it gave one \(say "no reason given" if not, or "the judge gave no reason line" for an OVERSTATED or UNDERSTATED ruling, whose brief requires one, and note that in the judge's agent `notes`\)\. Show this list to the user, and log it as `severityChanges`\./);
   // The judge brief still asks nothing new: the brief version stays 2 (round10 checks every brief byte for byte).
   assert.doesNotMatch(read('plugin/skills/council-dial/briefs/judge.md'), /severity change|reviewers' severities/i);
 });

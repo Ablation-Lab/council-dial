@@ -189,7 +189,8 @@ test('estimate: no history for the type, so no figure and a smaller trial run su
   assert.equal(e.tokens, null);
   assert.equal(e.trialSuggested, true);
   const text = e.notes.join(' ');
-  assert.match(text, /no estimate for it\. Suggest a smaller trial run first: a Quick council \(3 generalist reviewers, pooled\), or this council on one part of the material/);
+  assert.match(text, /no estimate for it\. If the material is more than 5 files or a whole folder, or you can't tell how many files it covers, suggest a smaller trial run first: a Quick council \(3 generalist reviewers, pooled\), or this council on one part of the material/);
+  assert.match(text, /For up to 5 named files, a trial isn't needed\./);
   assert.match(text, /every reviewer reads all of it/);
   assert.match(text, e.label.includes(' v3') ? /runs if the judge throws a finding out or there's a severity to check/ : /runs only if the judge throws a finding out/);
   assert.ok(!/https?:\/\//.test(text) && !('pricing' in e), 'no link or pricing field in the output; SKILL.md points users to the pricing page');
