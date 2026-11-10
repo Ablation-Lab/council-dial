@@ -121,7 +121,8 @@ test('full edition READMEs: the research intro, the connector limit and the 1.7.
     assert.match(r, /\*\*Why it exists:\*\* Council Dial is part of Ablation Lab's open research into how AI agents behave and how they review each other's work\./, f);
     assert.match(r, /The research is at \[Ablation-Lab\/evolving-review-councils\]\(https:\/\/github\.com\/Ablation-Lab\/evolving-review-councils\)\./, f);
     assert.match(r, /- Connectors you've enabled can reach every council agent\./, f);
-    assert.match(r, /`ENABLE_CLAUDEAI_MCP_SERVERS=false` turns off the connectors it fetches for that shell session/, f);
+    assert.match(r, /Only 2 of the 13 mentioned it in their NOTES:, so agents usually don't report it\. Council Dial can't stop that\./, f);
+    for (const k of ['`/mcp`: "You can also run', 'The `disableClaudeAiConnectors` setting: "To turn off', 'The environment variable `ENABLE_CLAUDEAI_MCP_SERVERS`, set to `false`, "which has the same effect for the current shell session"', 'The `deniedMcpServers` setting: "To block individual claude.ai connectors']) assert.ok(r.includes(`  - ${k}`), `${f}: ${k}`);
     assert.match(r, /from Council Dial 1\.7\.0, a severity you change is logged as that item's `userSeverity`/, f);
     assert.match(r, /"Raised in NOTES, not ruled on"/, f);
     assert.ok(r.indexOf('**Why it exists:**') < r.indexOf('## Quick start'), `${f}: the intro is near the top`);
@@ -185,7 +186,8 @@ liteTest('README: the research intro, the connector limit, the 2.0.0 runs and 2.
   assert.ok(r.indexOf('**Why it exists:**') < r.indexOf('## Quick start'));
   assert.match(r, /The research is at \[Ablation-Lab\/evolving-review-councils\]\(https:\/\/github\.com\/Ablation-Lab\/evolving-review-councils\)\./);
   assert.match(r, /- Connectors you've enabled can reach every council agent\. Claude Code's \[MCP docs\]\(https:\/\/code\.claude\.com\/docs\/en\/mcp\) say/);
-  assert.match(r, /Lite can't stop that\. Switching off the connectors you don't need before a run reduces it/);
+  assert.match(r, /Only 2 of the 13 mentioned it in their NOTES:, so agents usually don't report it\. Lite can't stop that\. Switching off the connectors you don't need before a run reduces it; the docs give four ways:/);
+  assert.match(r, /  - The `deniedMcpServers` setting: "To block individual claude\.ai connectors instead of all of them, add them to `deniedMcpServers` by name or by URL pattern\."/);
   assert.match(r, /\*\*Lite 2\.0\.0, interactive, three councils\*\*/);
   assert.match(r, /The Standard council ran from a copy of Lite checked out with Git's `core\.autocrlf=true`/);
   assert.match(r, /32 of 32 and 13 of 13 findings copied exactly, and every brief matched its template \(3 and 5\), including in the run from the CRLF copy/);
