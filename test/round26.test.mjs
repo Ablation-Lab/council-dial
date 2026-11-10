@@ -126,6 +126,7 @@ test('full edition READMEs: the research intro, the connector limit and the 1.7.
     assert.match(r, /from Council Dial 1\.7\.0, a severity you change is logged as that item's `userSeverity`/, f);
     assert.match(r, /"Raised in NOTES, not ruled on"/, f);
     assert.ok(r.indexOf('**Why it exists:**') < r.indexOf('## Quick start'), `${f}: the intro is near the top`);
+    assert.ok(r.includes("The appeal sees only the judge's own findings (the ones it dismissed and, in brief version 3, the ones in its severity block), never the reviewers' reports") && !r.includes('The appeal sees only the findings it dismissed'), `${f}: the merge limit names the severity block`);
   }
 });
 
@@ -193,7 +194,9 @@ liteTest('README: the research intro, the connector limit, the 2.0.0 runs and 2.
   assert.match(r, /32 of 32 and 13 of 13 findings copied exactly, and every brief matched its template \(3 and 5\), including in the run from the CRLF copy/);
   assert.match(r, /Claude Code compacted the Standard session while it was idle, after the run and its follow-up answers/);
   assert.match(r, /Lite 2\.1\.0 addresses what the 2\.0\.0 runs left/);
+  assert.ok(r.includes("The appeal sees only the judge's own findings (the ones it dismissed and, in brief version 3, the ones in its severity block), never the reviewers' reports") && !r.includes('The appeal sees only the findings it dismissed'));
+  assert.match(r, /Lite 2\.1\.1 corrects one README line, which since brief version 3 had said the appeal sees only the findings the judge dismissed/);
   assert.match(r, /Not tested yet: .*Lite 2\.1\.0's changes in a council run; a compaction in the middle of a run;/);
   assert.match(r, /From Lite 2\.1\.0 the search matches the names in any mix of upper and lower case/);
-  assert.match(r, /\(such as `\(Lite 2\.1\.0\)`,/);
+  assert.match(r, /\(such as `\(Lite 2\.1\.1\)`,/);
 });

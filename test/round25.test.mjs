@@ -88,7 +88,7 @@ liteTest('the hand-off notes, the README and the version point to the step files
   assert.match(r, /Lite 2\.0\.0 moves the steps out of SKILL\.md into six files next to it, word for word, apart from a few wording changes the move needed\./);
   assert.doesNotMatch(r, /section 10 of SKILL\.md/);
   const v = JSON.parse(fs.readFileSync(path.join(LITE, '.claude-plugin/plugin.json'), 'utf8')).version;
-  assert.equal(v, '2.1.0');
+  assert.equal(v, '2.1.1');
   assert.ok(readSkill('plan.md').includes(`"liteVersion": "${v}",`));
-  assert.doesNotMatch(liteSkillText(LITE), /\(Lite (1\.11|2\.0)\.0\)/);
+  assert.doesNotMatch(liteSkillText(LITE), /\(Lite (1\.11\.0|2\.0\.0|2\.1\.0)\)/);
 });

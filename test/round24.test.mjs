@@ -81,7 +81,7 @@ liteTest('SKILL.md: diffs, instruction files, the check always read-only, agent 
   assert.match(s, /"agentType": "council-dial-lite:council-reader"/);
   assert.match(s, /its `agentType` is the `subagent_type` you passed/);
   assert.match(s, /`\+debate`, `\+sequential`, `\+appeal`, `\+baseline`, `\+running-code` and `\+raw` for each one the run has, in that order/);
-  assert.match(s, /`lite: specialised-3\/judged\+debate\+appeal\+baseline v3 @claude-opus-5-5 \(Lite 2\.1\.0\)`/);
+  assert.match(s, /`lite: specialised-3\/judged\+debate\+appeal\+baseline v3 @claude-opus-5-5 \(Lite 2\.1\.1\)`/);
   assert.match(s, /`CLAUDE_CODE_SUBAGENT_EFFORT`, which \(from Claude Code 2\.1\.316\) sets the effort of every subagent that nothing else names one for/);
   assert.match(s, /PowerShell also reads `‘`, `’`, `‚` and `‛` as single quotes/);
   assert.match(s, /set `run_in_background` to true where the Agent tool has that parameter; where it doesn't, its agents already run in the background, and leaving it out isn't a deviation/);
