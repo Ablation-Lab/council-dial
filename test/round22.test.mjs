@@ -8,6 +8,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { liteSkillText } from './lite-skill.mjs';
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url));
 const LITE = path.resolve(process.env.COUNCIL_DIAL_LITE_DIR || path.join(ROOT, '..', 'council-dial-lite'));
@@ -15,7 +16,7 @@ const FOUND = fs.existsSync(LITE);
 const read = f => fs.readFileSync(path.join(ROOT, f), 'utf8');
 const readLite = f => fs.readFileSync(path.join(LITE, f), 'utf8');
 const liteTest = (name, fn) => test(`Lite repository: ${name}`, { skip: FOUND ? false : `SKIPPED: no Lite clone at ${LITE}` }, fn);
-const LITE_SKILL = () => readLite('skills/council-dial-lite/SKILL.md');
+const LITE_SKILL = () => liteSkillText(LITE);
 const FULL_STOP = 'In a ranked-list line, `File and line:` is its file locations, the part made of paths and line numbers before `Fix:`, without the brackets round it if it has them and without the full stop after it (`a.mjs:24, :29; README:7.` gives `a.mjs:24, :29; README:7`); `Title:` is the text between the number, severity and ruling and those locations, without the full stop, space or bracket that ends it, and a full stop inside it is kept. For example, from `1. **M4: MED, OVERSTATED.** Mutable seen default skips files. shelfkeep.py:112-122. Fix: …` or from `1. M4, MED, OVERSTATED. Mutable seen default skips files (shelfkeep.py:112-122). Fix: …`, `Title:` is `Mutable seen default skips files` and `File and line:` is `shelfkeep.py:112-122`. In a table, leave out only a full stop that ends a cell.';
 
 liteTest('a judged run\'s reviewer and debate reports go to the check as count files', () => {
@@ -45,7 +46,7 @@ test('required steps aren\'t deviations, and ranked-list full stops are dropped,
 
 liteTest('required steps aren\'t deviations; ranked-list full stops; harness notes aren\'t output', () => {
   const s = LITE_SKILL();
-  assert.ok(s.includes('A step this file requires isn\'t a deviation, even when it changes something you wrote earlier, such as correcting `overview.txt` after an OVERVIEW UNSUPPORTED item (section 6): do it, and don\'t log it. A step that says to log something, such as a BRIEF DIFFERS, still does, and a slip of yours that a step corrects is still a deviation, such as a finding you copied wrongly when the check\'s CHANGED was right.'));
+  assert.ok(s.includes('A step this skill requires isn\'t a deviation, even when it changes something you wrote earlier, such as correcting `overview.txt` after an OVERVIEW UNSUPPORTED item (section 6): do it, and don\'t log it. A step that says to log something, such as a BRIEF DIFFERS, still does, and a slip of yours that a step corrects is still a deviation, such as a finding you copied wrongly when the check\'s CHANGED was right.'));
   assert.ok(s.includes(FULL_STOP));
   assert.doesNotMatch(s, /without a full stop that only ends a table cell/);
   assert.ok(s.includes('In either shell, a line in Claude Code\'s own form `Shell cwd was reset to <folder>` isn\'t the command\'s output: leave only that line out when deciding whether the command printed nothing, or only "No such file or directory". Any other text, on its output or its errors, is the command\'s.'));

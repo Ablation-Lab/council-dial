@@ -9,6 +9,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { liteSkillText } from './lite-skill.mjs';
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url));
 const LITE = path.resolve(process.env.COUNCIL_DIAL_LITE_DIR || path.join(ROOT, '..', 'council-dial-lite'));
@@ -71,7 +72,7 @@ test('full edition: diffs, instruction files, Lite installed, labels, the log-fo
 });
 
 liteTest('SKILL.md: diffs, instruction files, the check always read-only, agent types, labels, subagent effort and quotes', () => {
-  const s = readLite('skills/council-dial-lite/SKILL.md');
+  const s = liteSkillText(LITE);
   assert.match(s, /- \*\*A diff, a branch or a commit\.\*\* The agents read files; the read-only agents can't run git, so they never see a diff\./);
   assert.match(s, /- \*\*No instruction files in the Lite folder\.\*\*/);
   assert.match(s, /Before you read or write any file under the Lite folder \(for an estimate, a comparison, a rerun, numbering a run, a run's first write, or an analysis\), search the Lite folder with Glob for `\*\*\/CLAUDE\.md`, `\*\*\/CLAUDE\.local\.md`, `\*\*\/AGENTS\.md` and `\*\*\/\.claude\/\*\*`; when agents can write \(section 3\), search the run folder again before each read-back\./);
@@ -79,7 +80,7 @@ liteTest('SKILL.md: diffs, instruction files, the check always read-only, agent 
   assert.match(s, /"agentType": "council-dial-lite:council-reader"/);
   assert.match(s, /its `agentType` is the `subagent_type` you passed/);
   assert.match(s, /`\+debate`, `\+sequential`, `\+appeal`, `\+baseline`, `\+running-code` and `\+raw` for each one the run has, in that order/);
-  assert.match(s, /`lite: specialised-3\/judged\+debate\+appeal\+baseline v3 @claude-opus-5-5 \(Lite 1\.11\.0\)`/);
+  assert.match(s, /`lite: specialised-3\/judged\+debate\+appeal\+baseline v3 @claude-opus-5-5 \(Lite 2\.0\.0\)`/);
   assert.match(s, /`CLAUDE_CODE_SUBAGENT_EFFORT`, which \(from Claude Code 2\.1\.316\) sets the effort of every subagent that nothing else names one for/);
   assert.match(s, /PowerShell also reads `‘`, `’`, `‚` and `‛` as single quotes/);
   assert.match(s, /set `run_in_background` to true where the Agent tool has that parameter; where it doesn't, its agents already run in the background, and leaving it out isn't a deviation/);
@@ -90,7 +91,7 @@ liteTest('SKILL.md: diffs, instruction files, the check always read-only, agent 
 });
 
 liteTest('SKILL.md: section 6 bullets, the checklist, NOTES:, results example, baseline checks, comparisons, reruns and the analyst', () => {
-  const s = readLite('skills/council-dial-lite/SKILL.md');
+  const s = liteSkillText(LITE);
   assert.match(s, /\n- \*\*For a COUNT MISMATCH:\*\* this is a report whose own count/);
   assert.match(s, /\n- \*\*For a CHANGED, LEFT OUT or NO SOURCE:\*\* fix each one in `summary\.txt`/);
   assert.match(s, /8\. \*\*Your own words in the report\.\*\* Apart from the lines this section itself asks for \(`My check:`, the severity changes, the baseline comparison and the appeal's calls\), will every fact of your own about the findings come from `overview\.txt`, and will you quote every agent's NOTES: lines exactly, never sum them up\?/);

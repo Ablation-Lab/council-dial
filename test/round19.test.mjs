@@ -9,6 +9,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { liteSkillText } from './lite-skill.mjs';
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url));
 const LITE = path.resolve(process.env.COUNCIL_DIAL_LITE_DIR || path.join(ROOT, '..', 'council-dial-lite'));
@@ -16,7 +17,7 @@ const FOUND = fs.existsSync(LITE);
 const read = f => fs.readFileSync(path.join(ROOT, f), 'utf8');
 const readLite = f => fs.readFileSync(path.join(LITE, f), 'utf8');
 const liteTest = (name, fn) => test(`Lite repository: ${name}`, { skip: FOUND ? false : `SKIPPED: no Lite clone at ${LITE}` }, fn);
-const LITE_SKILL = () => readLite('skills/council-dial-lite/SKILL.md');
+const LITE_SKILL = () => liteSkillText(LITE);
 const FULL_SKILL = () => read('plugin/skills/council-dial/SKILL.md');
 
 liteTest('the link check uses the forms that ran without a prompt, and warns off the ones that asked', () => {
@@ -35,7 +36,8 @@ liteTest('the link check uses the forms that ran without a prompt, and warns off
 liteTest('templates: a file in the skill folder is read first, so one answer covers its subfolders', () => {
   const s = LITE_SKILL();
   assert.match(s, /Read `\$\{CLAUDE_SKILL_DIR\}\/check-brief\.md` first \(in a raw run, `\$\{CLAUDE_SKILL_DIR\}\/raw-handoff\.md`\), before any file in `briefs\/`\./);
-  assert.match(s, /starting with the skill folder itself lets one answer cover `briefs\/` and `briefs\/v3\/` too, where starting in a subfolder can mean up to three prompts/);
+  // Lite 2.0.0: the first read in the skill folder is now a step file, such as plan.md.
+  assert.match(s, /a prompt for a file in the skill folder itself, such as this one, lets one answer cover `briefs\/` and `briefs\/v3\/` too, where a prompt for a file in a subfolder covers only that subfolder\./);
   assert.match(readLite('README.md'), /From Lite 1\.8\.0, Claude reads a file in the skill folder itself first, so that one answer covers its `briefs\/` subfolders too\./);
 });
 

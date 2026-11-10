@@ -11,6 +11,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { BRIEF_SHA256_V3 } from '../plugin/skills/council-dial/scripts/council.mjs';
+import { liteSkillText } from './lite-skill.mjs';
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url));
 const LITE = path.resolve(process.env.COUNCIL_DIAL_LITE_DIR || path.join(ROOT, '..', 'council-dial-lite'));
@@ -18,7 +19,7 @@ const FOUND = fs.existsSync(LITE);
 const read = f => fs.readFileSync(path.join(ROOT, f), 'utf8');
 const readLite = f => fs.readFileSync(path.join(LITE, f), 'utf8');
 const liteTest = (name, fn) => test(`Lite repository: ${name}`, { skip: FOUND ? false : `SKIPPED: no Lite clone at ${LITE}` }, fn);
-const LITE_SKILL = () => readLite('skills/council-dial-lite/SKILL.md');
+const LITE_SKILL = () => liteSkillText(LITE);
 const CITE = 'Cite each file only by the relative path the material line gives, with its line number (such as src/app.js:12), never by a full path.';
 const NOTES = "Findings go in your report, never in notes. If you want to add anything else your brief doesn't ask for, put it at the very end, after a line NOTES:, in at most five short lines.";
 

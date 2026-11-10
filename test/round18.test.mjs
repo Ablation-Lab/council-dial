@@ -10,6 +10,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runCommand, parseArgs as parseArgsV3, AGENT_NOTES_MAX } from '../plugin/skills/council-dial/scripts/council.mjs';
+import { liteSkillText } from './lite-skill.mjs';
 
 const parseArgs = argv => parseArgsV3(['plan', 'estimate'].includes(argv[0]) && !argv.includes('--brief-version') ? [...argv, '--brief-version', '2'] : argv);
 const ROOT = fileURLToPath(new URL('../', import.meta.url));
@@ -23,7 +24,7 @@ const tmp = () => { const d = fs.mkdtempSync(path.join(os.tmpdir(), 'council-dia
 after(() => { for (const d of made) fs.rmSync(d, { recursive: true, force: true }); });
 const run = (p, argv, input = '') => runCommand({ ...parseArgs(argv), project: p }, input, new Date(), {});
 const lastRow = p => JSON.parse(fs.readFileSync(path.join(p, 'reviews', 'review-log.jsonl'), 'utf8').trim().split('\n').pop());
-const LITE_SKILL = () => readLite('skills/council-dial-lite/SKILL.md');
+const LITE_SKILL = () => liteSkillText(LITE);
 const runJsonOf = skill => JSON.parse(skill.match(/```json\n(\{\n {2}"edition"[\s\S]*?\n\})\n```/)[1]);
 const resultsOf = skill => JSON.parse(skill.match(/## 8\. Log the results\n\nSet `results` in `run\.json`:\n\n```json\n([\s\S]*?)\n```/)[1]);
 

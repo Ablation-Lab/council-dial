@@ -8,6 +8,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { liteSkillText } from './lite-skill.mjs';
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url));
 const LITE = path.resolve(process.env.COUNCIL_DIAL_LITE_DIR || path.join(ROOT, '..', 'council-dial-lite'));
@@ -15,7 +16,7 @@ const FOUND = fs.existsSync(LITE);
 const read = f => fs.readFileSync(path.join(ROOT, f), 'utf8');
 const readLite = f => fs.readFileSync(path.join(LITE, f), 'utf8');
 const liteTest = (name, fn) => test(`Lite repository: ${name}`, { skip: FOUND ? false : `SKIPPED: no Lite clone at ${LITE}` }, fn);
-const LITE_SKILL = () => readLite('skills/council-dial-lite/SKILL.md');
+const LITE_SKILL = () => liteSkillText(LITE);
 
 liteTest('the overview is written before the check, which checks its facts against every report', () => {
   const s = LITE_SKILL();
@@ -52,7 +53,7 @@ liteTest('results are logged before the report, which is the last message', () =
 liteTest('no Quick trial for a Quick council, and labels carry the Lite version', () => {
   const s = LITE_SKILL();
   assert.match(s, /when the council asked for is already Quick, only this council on one part of the material/);
-  assert.match(s, /- Last, a space and `\(Lite <liteVersion>\)` from the run's `liteVersion`, such as `\(Lite 1\.11\.0\)`, so estimates and comparisons never mix runs of different Lite versions\./);
+  assert.match(s, /- Last, a space and `\(Lite <liteVersion>\)` from the run's `liteVersion`, such as `\(Lite 2\.0\.0\)`, so estimates and comparisons never mix runs of different Lite versions\./);
   const j = JSON.parse(s.match(/```json\n(\{\n {2}"edition"[\s\S]*?\n\})\n```/)[1]);
   assert.ok(j.label.endsWith(`(Lite ${j.liteVersion})`), j.label);
   assert.equal(j.liteVersion, JSON.parse(readLite('.claude-plugin/plugin.json')).version);

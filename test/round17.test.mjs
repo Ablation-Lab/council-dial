@@ -6,6 +6,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { liteSkillText } from './lite-skill.mjs';
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url));
 const LITE = path.resolve(process.env.COUNCIL_DIAL_LITE_DIR || path.join(ROOT, '..', 'council-dial-lite'));
@@ -41,15 +42,15 @@ liteTest('raw-handoff.md: one handoff text block, with only the four documented 
   assert.match(text, /Analyse it soon\./);
   // The run folder is given relative to the project, so no home path goes into the note.
   assert.match(md, /`\{\{run folder\}\}` the run folder's path relative to the project root/);
-  assert.match(readLite('skills/council-dial-lite/SKILL.md'), /^## 10\. Raw runs$/m);
+  assert.match(liteSkillText(LITE), /^## 10\. Raw runs$/m);
 });
 
 liteTest('SKILL.md: raw mode is opt-in, drops only the check agent, is labelled +raw, and is handed off', () => {
-  const skill = readLite('skills/council-dial-lite/SKILL.md');
+  const skill = liteSkillText(LITE);
   assert.match(skill, /- \*\*Raw mode:\*\* only if the user asks for a raw run\./);
   assert.match(skill, /A raw run has one agent fewer than the same type otherwise would \(no check\); say so when you count\. Its label has `\+raw` after the other extras/);
   assert.match(skill, /`\+debate`, `\+sequential`, `\+appeal`, `\+baseline`, `\+running-code` and `\+raw` for each one the run has, in that order: `\+baseline` when `type\.baseline` is `true`, and `\+running-code` when `runningCode` is `allowed`\. A run logged before Lite 1\.6\.0 has no `type\.raw`, and isn't raw; one with no `runningCode` didn't allow it\./);
-  assert.match(skill, /`lite: specialised-3\/judged\+appeal\+raw v3 @claude-opus-5-5 \(Lite 1.11.0\)`/);
+  assert.match(skill, /`lite: specialised-3\/judged\+appeal\+raw v3 @claude-opus-5-5 \(Lite 2\.0\.0\)`/);
   assert.match(skill, /\| check \| always, except in a raw run \| `check` \|/);
   assert.match(skill, /Read `\$\{CLAUDE_SKILL_DIR\}\/check-brief\.md` first \(in a raw run, `\$\{CLAUDE_SKILL_DIR\}\/raw-handoff\.md`\), before any file in `briefs\/`\./);
 
@@ -97,7 +98,7 @@ liteTest('README: the three-step Quick start keeps the Edit rule and says why Li
   assert.equal(quick.match(/^\d\. /gm).length, 3);
   assert.match(quick, /^1\. \*\*Set up the save rule\.\*\*/m);
   assert.match(quick, /^2\. \*\*Ask for a council\.\*\*/m);
-  assert.match(quick, /^3\. \*\*Allow the template reads\.\*\*/m);
+  assert.match(quick, /^3\. \*\*Allow reading Lite's skill folder\.\*\*/m);
   assert.match(quick, /Lite still needs the rule: the agents can't write, so Claude saves everything itself, and in Manual mode each of those writes would otherwise ask you\./);
   assert.match(quick, /every file Claude writes for a run in `reviews\/lite\/`, the default Lite folder \(each report, brief, summary and `run\.json`\), goes through without asking/);
   assert.doesNotMatch(quick, /every report a run saves/);

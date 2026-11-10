@@ -9,6 +9,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { liteSkillText } from './lite-skill.mjs';
 
 const ROOT = fileURLToPath(new URL('../', import.meta.url));
 const LITE = path.resolve(process.env.COUNCIL_DIAL_LITE_DIR || path.join(ROOT, '..', 'council-dial-lite'));
@@ -17,7 +18,7 @@ const read = f => fs.readFileSync(path.join(ROOT, f), 'utf8');
 const readLite = f => fs.readFileSync(path.join(LITE, f), 'utf8');
 const liteTest = (name, fn) => test(`Lite repository: ${name}`, { skip: FOUND ? false : `SKIPPED: no Lite clone at ${LITE}` }, fn);
 const FULL_SKILL = () => read('plugin/skills/council-dial/SKILL.md');
-const LITE_SKILL = () => readLite('skills/council-dial-lite/SKILL.md');
+const LITE_SKILL = () => liteSkillText(LITE);
 const LABELS = ['Finding: ', 'Title: ', 'File and line: ', 'Claim: ', 'Reviewer severities: ', "Judge's severity: ", "Judge's reason: "];
 
 // The example severity item in a SKILL.md: the fenced block right after "Lay out each severity item exactly like this".
