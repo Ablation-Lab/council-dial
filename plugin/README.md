@@ -4,6 +4,8 @@
 
 Council Dial is a Claude Code plugin that has a small panel of Claude reviewers check your code, docs or plan. In its standard setup, three reviewers each check the work on their own, a judge checks every finding they report and throws out the ones that don't hold up, and an appeal agent rechecks anything the judge threw out. You make the final call on what to keep.
 
+For example, a council can review code or scripts for destructive commands, such as a recursive delete (`rm -rf`) whose target could resolve to data that shouldn't be deleted, alongside ordinary bugs, security problems and docs that don't match the code. The reviewers only read the material and report what they find (by default they can't run anything), and a council lowers the chance of missing a problem but doesn't guarantee it finds every one.
+
 It's for people who already review work with Claude Code and want to know which way of reviewing works best for their kind of work: for example, whether specialised reviewers find more than generalists, or whether a debate round is worth the extra tokens. Every run's setup and what it found go into a log in your project, so over time you can compare setups on your own material.
 
 It's a research tool. It doesn't claim that any setup, including the judge and the appeal, works better than another; the log is there so you can measure that on your own work.

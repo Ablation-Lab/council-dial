@@ -198,5 +198,26 @@ liteTest('README: the research intro, the connector limit, the 2.0.0 runs and 2.
   assert.match(r, /Lite 2\.1\.1 corrects one README line, which since brief version 3 had said the appeal sees only the findings the judge dismissed/);
   assert.match(r, /Not tested yet: .*Lite 2\.1\.0's changes in a council run; a compaction in the middle of a run;/);
   assert.match(r, /From Lite 2\.1\.0 the search matches the names in any mix of upper and lower case/);
-  assert.match(r, /\(such as `\(Lite 2\.1\.1\)`,/);
+  assert.match(r, /\(such as `\(Lite 2\.1\.2\)`,/);
+});
+
+test('the destructive-command example: in both descriptions, within 500 characters, and in all three READMEs', () => {
+  const descs = [
+    [JSON.parse(read('plugin/.claude-plugin/plugin.json')).description, JSON.parse(read('.claude-plugin/marketplace.json')).plugins[0].description],
+  ];
+  if (FOUND) descs.push([JSON.parse(readLite('.claude-plugin/plugin.json')).description, JSON.parse(readLite('.claude-plugin/marketplace.json')).plugins[0].description]);
+  for (const [a, b] of descs) {
+    assert.equal(a, b);
+    // Anthropic's Plugins API refuses a plugin.json description over 500 characters.
+    assert.ok(a.length <= 500, `the description is ${a.length} characters`);
+    assert.match(a, /A council can flag an rm -rf that could delete the wrong data, as well as bugs, security issues and wrong docs, but may miss some/);
+    assert.match(a, /read-only (agents )?by default/);
+  }
+  const example = "For example, a council can review code or scripts for destructive commands, such as a recursive delete (`rm -rf`) whose target could resolve to data that shouldn't be deleted, alongside ordinary bugs, security problems and docs that don't match the code. The reviewers only read the material and report what they find (by default they can't run anything), and a council lowers the chance of missing a problem but doesn't guarantee it finds every one.";
+  const files = [read('README.md'), read('plugin/README.md')];
+  if (FOUND) files.push(readLite('README.md'));
+  for (const r of files) {
+    assert.ok(r.includes(`You make the final call on what to keep.\n\n${example}`));
+    assert.ok(r.indexOf(example) < r.indexOf('## Quick start'));
+  }
 });

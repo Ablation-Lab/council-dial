@@ -72,8 +72,8 @@ test('docs: both READMEs open with a plain-English section and a quick start, an
   assert.match(skill, /`update` cuts longer notes and returns a `warning`/);
 });
 
-test('the version is 1.7.0 everywhere', () => {
-  assert.equal(PLUGIN_VERSION, '1.7.0');
-  assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, 'plugin/.claude-plugin/plugin.json'), 'utf8')).version, '1.7.0');
-  assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, '.claude-plugin/marketplace.json'), 'utf8')).plugins[0].version, '1.7.0');
+test('the version is 1.7.1 everywhere', () => {
+  assert.equal(PLUGIN_VERSION, '1.7.1');
+  assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, 'plugin/.claude-plugin/plugin.json'), 'utf8')).version, '1.7.1');
+  assert.equal(JSON.parse(fs.readFileSync(path.join(ROOT, '.claude-plugin/marketplace.json'), 'utf8')).plugins[0].version, '1.7.1');
 });
