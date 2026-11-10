@@ -41,7 +41,7 @@ export const VERSION = 3;
 export const BRIEF_VERSIONS = [2, 3];
 // Council Dial's own version, recorded with each plan so a run's setup can be rebuilt exactly. Keep it
 // equal to the plugin manifest's version (a test checks).
-export const PLUGIN_VERSION = '1.6.0';
+export const PLUGIN_VERSION = '1.7.0';
 const COMMANDS = ['plan', 'estimate', 'log', 'update', 'report', 'setup', 'list', 'compare'];
 // The description of what's reviewed is kept at this length when planned and when read back.
 export const TARGET_MAX = 600;
@@ -840,13 +840,15 @@ export const APPEAL_CALLS = ['reinstated', 'upheld', 'pending'];
 // often it disagrees, and on which kind, can be judged later.
 export const SEVERITY_VIEWS = ['fair', 'too low', 'too high', 'unsure'];
 export const SEVERITY_CALLS = ['kept', 'changed', 'pending'];
-function checkSeverityItems(list) {
+// userSeverity (from 1.7.0) is the severity the user changed a finding to. Rows logged before it have none,
+// so a row read back from the log (strict false) takes the appeal's severity where there is one.
+function checkSeverityItems(list, strict = true) {
   if (list == null) return [];
   if (!Array.isArray(list)) throw new Error('appeal.severityItems must be a list, one per finding in the appeal\'s severity block');
   if (list.length > 50) throw new Error('appeal.severityItems can have at most 50 entries');
   return list.map((x, i) => {
     const w = `appeal.severityItems[${i}]`;
-    if (!x || typeof x !== 'object' || Array.isArray(x)) throw new Error(`${w} must be an object: {"finding": "<run id>/judge/M4: <short title>", "reviewers": ["MED"], "judge": "LOW", "view": "too low", "appealSeverity": "MED", "call": "pending"}`);
+    if (!x || typeof x !== 'object' || Array.isArray(x)) throw new Error(`${w} must be an object: {"finding": "<run id>/judge/M4: <short title>", "reviewers": ["MED"], "judge": "LOW", "view": "too low", "appealSeverity": "MED", "call": "pending", "userSeverity": null}`);
     const finding = clean(x.finding, 120);
     if (!finding) throw new Error(`${w}.finding needs the finding's citation and a short title`);
     if (!Array.isArray(x.reviewers) || !x.reviewers.length || x.reviewers.length > 9) throw new Error(`${w}.reviewers must list each reviewer's severity for it (1 to 9)`);
@@ -861,7 +863,17 @@ function checkSeverityItems(list) {
     if (x.view === 'fair' || x.view === 'unsure') appealSeverity = null;
     if (!SEVERITY_CALLS.includes(x.call)) throw new Error(`${w}.call must be ${SEVERITY_CALLS.join(', ')}`);
     if (x.view === 'fair' && x.call !== 'kept') throw new Error(`${w}: the appeal found the severity fair, so call is kept`);
-    return { finding, kind: changed ? 'changed' : 'kept at low', reviewers, judge, view: x.view, appealSeverity, call: x.call };
+    let userSeverity = x.userSeverity == null ? null : strict ? sevOf(x.userSeverity, `${w}.userSeverity`) : (SEVERITIES.includes(String(x.userSeverity).toLowerCase()) ? String(x.userSeverity).toLowerCase() : null);
+    // A row read back from the log keeps its results: a userSeverity that doesn't fit is dropped, not refused.
+    if (!strict && (x.call !== 'changed' || userSeverity === judge)) userSeverity = null;
+    if (x.call !== 'changed') {
+      if (userSeverity) throw new Error(`${w}.userSeverity is the severity the user changed it to, so it's null unless call is changed`);
+    } else {
+      userSeverity ??= appealSeverity;
+      if (!userSeverity && strict) throw new Error(`${w}: call is changed, so userSeverity needs the severity the user chose`);
+      if (userSeverity && userSeverity === judge) throw new Error(`${w}: userSeverity is the judge's ${judge.toUpperCase()}, so call is kept`);
+    }
+    return { finding, kind: changed ? 'changed' : 'kept at low', reviewers, judge, view: x.view, appealSeverity, call: x.call, userSeverity };
   });
 }
 // strict is false when a row is read back from the log, where the run's brief version isn't known here,
@@ -881,7 +893,7 @@ function checkAppeal(a, version = 2, strict = true) {
     return { finding, view: x.view, call: x.call };
   });
   const out = { ran: !!a.ran, reviewed: int(a.reviewed, 'appeal.reviewed'), items };
-  const sev = checkSeverityItems(a.severityItems);
+  const sev = checkSeverityItems(a.severityItems, strict);
   if (sev.length || a.severityReviewed != null) {
     if (strict && version < 3 && sev.length) throw new Error(`brief version ${version}'s appeal checks dismissals only; leave severityItems out`);
     out.severityReviewed = int(a.severityReviewed, 'appeal.severityReviewed');
@@ -1142,7 +1154,7 @@ function markdown(runs) {
         const si = res.appeal?.severityItems ?? [];
         if (si.length) {
           const kind = k => si.filter(x => x.kind === k), fl = l => l.filter(x => x.view !== 'fair').length;
-          parts.push(`Appeal on severity: ${si.length} checked (${kind('changed').length} changed severities, ${fl(kind('changed'))} flagged; ${kind('kept at low').length} unchanged LOW findings, ${fl(kind('kept at low'))} flagged): ${si.map(x => `${cell(x.finding)} judge ${x.judge.toUpperCase()}, ${x.view.toUpperCase()}${x.appealSeverity ? ` (${x.appealSeverity.toUpperCase()})` : ''}${x.view === 'fair' ? '' : `, ${x.call}`}`).join('; ')}`);
+          parts.push(`Appeal on severity: ${si.length} checked (${kind('changed').length} changed severities, ${fl(kind('changed'))} flagged; ${kind('kept at low').length} unchanged LOW findings, ${fl(kind('kept at low'))} flagged): ${si.map(x => `${cell(x.finding)} judge ${x.judge.toUpperCase()}, ${x.view.toUpperCase()}${x.appealSeverity ? ` (${x.appealSeverity.toUpperCase()})` : ''}${x.view === 'fair' ? '' : `, ${x.call}`}${x.userSeverity ? ` to ${x.userSeverity.toUpperCase()}` : ''}`).join('; ')}`);
         }
         if (res.deviations?.length) parts.push(`${res.deviations.length} ${res.deviations.length === 1 ? 'deviation' : 'deviations'} from SKILL.md (their exact text is in review-log.jsonl)`);
         const un = (res.agents || []).filter(a => a.reportUnescaped).map(a => cell(a.label));
