@@ -21,7 +21,7 @@ const TITLES = {
 
 liteTest('SKILL.md holds the ground rules and the index, and no section', () => {
   const s = readSkill('SKILL.md');
-  assert.deepEqual(s.match(/^## .*$/gm), ['## Ground rules', '## The steps and their files']);
+  assert.deepEqual(s.match(/^## .*$/gm), ['## Ground rules', '## The steps and their files', '## Ground rules, continued']);
   // The whole of SKILL.md survives a compaction: well under 5,000 tokens (about 20,000 characters).
   assert.ok(s.length < 16000, `SKILL.md is ${s.length} characters`);
   assert.match(s, /^- \*\*Before each step, read its file\.\*\* Before you start a section, Read the file that holds it, in full, by its path above\./m);
@@ -83,12 +83,12 @@ liteTest('the hand-off notes, the README and the version point to the step files
   assert.doesNotMatch(h, /SKILL\.md section|table in SKILL\.md/);
   const r = fs.readFileSync(path.join(LITE, 'README.md'), 'utf8') + '\n' + fs.readFileSync(path.join(LITE, 'CHANGELOG.md'), 'utf8');
   assert.match(r, /`skills\/council-dial-lite\/SKILL\.md` and its six step files \(`plan\.md`, `run\.md`, `summary-and-check\.md`, `report-and-log\.md`, `comparisons\.md` and `raw\.md`, next to it\) are what Claude follows/);
-  assert.match(r, /Keep SKILL\.md well under 5,000 tokens \(about 20,000 characters\), so a compaction keeps all of it/);
+  assert.match(r, /SKILL\.md as loaded \(with its paths filled in for an installed copy\) is 7,039 tokens on both Opus 5\.5 and Sonnet 5\.5/);
   assert.match(r, /\(section 10 of the skill, in `raw\.md`, then sections 5, 7 and 8\)/);
   assert.match(r, /Lite 2\.0\.0 moves the steps out of SKILL\.md into six files next to it, word for word, apart from a few wording changes the move needed\./);
   assert.doesNotMatch(r, /section 10 of SKILL\.md/);
   const v = JSON.parse(fs.readFileSync(path.join(LITE, '.claude-plugin/plugin.json'), 'utf8')).version;
-  assert.equal(v, '2.2.1');
+  assert.equal(v, '2.2.2');
   assert.ok(readSkill('plan.md').includes(`"liteVersion": "${v}",`));
-  assert.doesNotMatch(liteSkillText(LITE), /\(Lite (1\.11\.0|2\.0\.0|2\.1\.0|2\.1\.1|2\.1\.2|2\.2\.0)\)/);
+  assert.doesNotMatch(liteSkillText(LITE), /\(Lite (1\.11\.0|2\.0\.0|2\.1\.0|2\.1\.1|2\.1\.2|2\.2\.0|2\.2\.1)\)/);
 });

@@ -116,8 +116,8 @@ liteTest('README and CHANGELOG: for Claude Code first, the history and the porta
   assert.ok(r.length < 60000, `the README is ${r.length} characters`);
   assert.doesNotMatch(r, /\*\*Lite \d+\.\d+\.\d+, interactive/);
   assert.doesNotMatch(r, /The directory told us:/);
-  assert.match(r, /The directory's message is in \[CHANGELOG\.md\]\(CHANGELOG\.md#why-only-lite-is-submitted\)\./);
-  assert.match(r, /is in \[CHANGELOG\.md\]\(CHANGELOG\.md#test-runs\)\./);
+  assert.match(r, /The directory's message is in \[CHANGELOG\.md\]\(https:\/\/github\.com\/Ablation-Lab\/council-dial-lite\/blob\/main\/CHANGELOG\.md#why-only-lite-is-submitted\)\./);
+  assert.match(r, /is in \[CHANGELOG\.md\]\(https:\/\/github\.com\/Ablation-Lab\/council-dial-lite\/blob\/main\/CHANGELOG\.md#test-runs\)\./);
   for (const h of ['## 2.2.0', '## Earlier versions', '## Test runs', '## Why only Lite is submitted']) assert.ok(c.includes(`\n${h}\n`), h);
   assert.match(c, /The directory told us: "The directory accepts scripts, programs, and files outside the allowed types only from Verified organizations/);
   assert.match(c, /\*\*Lite 2\.0\.0, interactive, three councils\*\*/);
