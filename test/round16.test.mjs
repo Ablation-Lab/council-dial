@@ -121,7 +121,7 @@ liteTest('the manifest description says Claude saves the reports, not the agents
     const j = JSON.parse(readLite(f));
     const desc = f.endsWith('plugin.json') ? j.description : j.plugins[0].description;
     assert.doesNotMatch(desc, /save its own report|saves its own report/, f);
-    assert.match(desc, /with read-only agents by default\. Claude saves each agent's report itself/, f);
+    assert.match(desc, /^The script-free edition of Council Dial, for Claude Code: a council of Claude subagents, read-only by default/, f);
   }
 });
 
@@ -156,8 +156,8 @@ liteTest('run.json describes its token figures as context sizes', () => {
 
 liteTest('README: version 2 agents are general-purpose, and the reads include the project settings files', () => {
   const readme = readLite('README.md');
-  assert.match(readme, /\*\*Reads:\*\*.*the project's `\.claude\/settings\.local\.json` and `\.claude\/settings\.json`, if they exist, using only their `modelSettings` and `effortLevel` keys/);
-  assert.match(readme, /These four runs predate Lite 1\.4\.0/);
-  assert.match(readme, /\*\*Lite 1\.4\.0, interactive, on Opus\*\*/);
+  assert.match(readme, /\*\*Reads:\*\*.*the project's `\.claude\/settings\.local\.json` and `\.claude\/settings\.json`, if they exist, to show the effort a seat on another model will run at\. From Lite 2\.2\.0 Claude searches them with Grep for `effortLevel`/);
+  assert.match(readLite('CHANGELOG.md'), /These four runs predate Lite 1\.4\.0/);
+  assert.match(readLite('CHANGELOG.md'), /\*\*Lite 1\.4\.0, interactive, on Opus\*\*/);
   assert.doesNotMatch(readme, /Lite now gives each agent its save line first and again last/);
 });

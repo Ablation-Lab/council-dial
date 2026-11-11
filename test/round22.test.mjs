@@ -27,7 +27,7 @@ liteTest('a judged run\'s reviewer and debate reports go to the check as count f
   assert.match(b, /4\. For each file under Report files: and Count files:, check every count it gives of items listed in that same report, such as a closing line "Severity findings: 13 checked" against the severity verdicts it gives, or "three problems:" inside a finding against the list that follows it, by counting those items yourself\. A file listed only under Count files: is for this step only\./);
   assert.match(b, /The report files, any count files, the summary file/);
   assert.match(b, /From Lite 1\.10\.1, step 4 also checks the count lines of a judged run's reviewer and debate reports/);
-  const r = readLite('README.md');
+  const r = (readLite('README.md') + '\n' + readLite('CHANGELOG.md'));
   assert.match(r, /from Lite 1\.10\.1 that covers a judged run's reviewer and debate reports too, not only the judge's, the appeal's and the baseline's\./);
   assert.match(r, /a reviewer wrote that something "causes three problems" and listed four/);
   assert.match(r, /Claude logged its required correction of the overview as a deviation\./);
@@ -50,6 +50,6 @@ liteTest('required steps aren\'t deviations; ranked-list full stops; harness not
   assert.ok(s.includes(FULL_STOP));
   assert.doesNotMatch(s, /without a full stop that only ends a table cell/);
   assert.ok(s.includes('In either shell, a line in Claude Code\'s own form `Shell cwd was reset to <folder>` isn\'t the command\'s output: leave only that line out when deciding whether the command printed nothing, or only "No such file or directory". Any other text, on its output or its errors, is the command\'s.'));
-  const r = readLite('README.md');
+  const r = (readLite('README.md') + '\n' + readLite('CHANGELOG.md'));
   assert.match(r, /Lite 1\.10\.1 then extends the count check to a judged run's reviewer and debate reports/);
 });

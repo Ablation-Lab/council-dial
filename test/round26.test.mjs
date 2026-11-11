@@ -146,7 +146,7 @@ liteTest('plan.md: section 2\'s first lines, when started is set, NOTES findings
   const p1 = liteSection(LITE, 2), p3 = liteSection(LITE, 3);
   assert.match(p1, /Start the plan with a line or two giving the type, the agent count and the estimate, and saying that bigger material costs more, because every reviewer reads all of it\. The rest of the plan, below, follows them\./);
   assert.doesNotMatch(p1, /estimate in one or two lines/);
-  assert.match(p3, /That change comes after its brief is saved to `briefs\/` and may also hold its `briefChecks` entry; no other write or Agent call comes between it and the Agent call \(its read-back may, and so may a search or a re-read of reports that a step asks for\)\. `run\.json` is created before any brief is saved, so the change that creates it never sets `started` to `true`\./);
+  assert.match(p3, /1\. Save its brief to `briefs\/` \(section 3, "Briefs"\)\.\n2\. Make one `run\.json` change that sets its `started` to `true`\. The same change may hold its `briefChecks` entry\.\n3\. Read `run\.json` back, as below\. A search or a re-read of reports that a step asks for may also come here; no other write and no Agent call may\.\n4\. Make its Agent call/);
   assert.match(p3, /\nThat includes a finding in its NOTES: slot, the one kind of text there that needs noting, although its prompt says findings go in the report/);
   assert.match(p3, /Such an item isn't a council finding, even when the judge or the appeal raised it there: it isn't a merged finding the judge ruled on, and no appeal checked it, so it stays out of the summary, every count and your own checks, and section 7 shows it apart\./);
   assert.match(p3, /A read-back, of `run\.json` or of any saved file, is one Read of the whole file with no `offset` or `limit`: a read from a line onwards, of some of its lines, or a search such as Grep isn't one\./);
@@ -182,7 +182,7 @@ liteTest('sections 5, 7, 8 and 10: early checks, the tally, the judge\'s reason,
 });
 
 liteTest('README: the research intro, the connector limit, the 2.0.0 runs and 2.1.0', () => {
-  const r = readLite('README.md');
+  const r = (readLite('README.md') + '\n' + readLite('CHANGELOG.md'));
   assert.match(r, /\*\*Why it exists:\*\* Council Dial is part of Ablation Lab's open research into how AI agents behave and how they review each other's work\./);
   assert.ok(r.indexOf('**Why it exists:**') < r.indexOf('## Quick start'));
   assert.match(r, /The research is at \[Ablation-Lab\/evolving-review-councils\]\(https:\/\/github\.com\/Ablation-Lab\/evolving-review-councils\)\./);
@@ -196,9 +196,9 @@ liteTest('README: the research intro, the connector limit, the 2.0.0 runs and 2.
   assert.match(r, /Lite 2\.1\.0 addresses what the 2\.0\.0 runs left/);
   assert.ok(r.includes("The appeal sees only the judge's own findings (the ones it dismissed and, in brief version 3, the ones in its severity block), never the reviewers' reports") && !r.includes('The appeal sees only the findings it dismissed'));
   assert.match(r, /Lite 2\.1\.1 corrects one README line, which since brief version 3 had said the appeal sees only the findings the judge dismissed/);
-  assert.match(r, /Not tested yet: .*Lite 2\.1\.0's changes in a council run; a compaction in the middle of a run;/);
+  assert.match(r, /Not tested yet: .*Lite 2\.2\.0's changes in a council run \(a Standard council ran on 2\.1\.2\); a compaction in the middle of a run;/);
   assert.match(r, /From Lite 2\.1\.0 the search matches the names in any mix of upper and lower case/);
-  assert.match(r, /\(such as `\(Lite 2\.1\.2\)`,/);
+  assert.match(r, /\(such as `\(Lite 2\.2\.0\)`,/);
 });
 
 test('the destructive-command example: in both descriptions, within 500 characters, and in all three READMEs', () => {
@@ -210,7 +210,7 @@ test('the destructive-command example: in both descriptions, within 500 characte
     assert.equal(a, b);
     // Anthropic's Plugins API refuses a plugin.json description over 500 characters.
     assert.ok(a.length <= 500, `the description is ${a.length} characters`);
-    assert.match(a, /A council can flag an rm -rf that could delete the wrong data, as well as bugs, security issues and wrong docs, but may miss some/);
+    assert.match(a, /rm -rf whose target could resolve to the wrong data|rm -rf that could delete the wrong data/);
     assert.match(a, /read-only (agents )?by default/);
   }
   const example = "For example, a council can review code or scripts for destructive commands, such as a recursive delete (`rm -rf`) whose target could resolve to data that shouldn't be deleted, alongside ordinary bugs, security problems and docs that don't match the code. The reviewers only read the material and report what they find (by default they can't run anything), and a council lowers the chance of missing a problem but doesn't guarantee it finds every one.";

@@ -81,14 +81,14 @@ liteTest('the hand-off notes, the README and the version point to the step files
   assert.match(h, /the analysis follows the skill's section 10 \(`raw\.md`\), never this file/);
   assert.match(h, /in the order of the agents table in section 3 of the skill, in `plan\.md` \(not the `\.as-received\.txt` copies/);
   assert.doesNotMatch(h, /SKILL\.md section|table in SKILL\.md/);
-  const r = fs.readFileSync(path.join(LITE, 'README.md'), 'utf8');
+  const r = fs.readFileSync(path.join(LITE, 'README.md'), 'utf8') + '\n' + fs.readFileSync(path.join(LITE, 'CHANGELOG.md'), 'utf8');
   assert.match(r, /`skills\/council-dial-lite\/SKILL\.md` and its six step files \(`plan\.md`, `run\.md`, `summary-and-check\.md`, `report-and-log\.md`, `comparisons\.md` and `raw\.md`, next to it\) are what Claude follows/);
   assert.match(r, /Keep SKILL\.md well under 5,000 tokens \(about 20,000 characters\), so a compaction keeps all of it/);
   assert.match(r, /\(section 10 of the skill, in `raw\.md`, then sections 5, 7 and 8\)/);
   assert.match(r, /Lite 2\.0\.0 moves the steps out of SKILL\.md into six files next to it, word for word, apart from a few wording changes the move needed\./);
   assert.doesNotMatch(r, /section 10 of SKILL\.md/);
   const v = JSON.parse(fs.readFileSync(path.join(LITE, '.claude-plugin/plugin.json'), 'utf8')).version;
-  assert.equal(v, '2.1.2');
+  assert.equal(v, '2.2.0');
   assert.ok(readSkill('plan.md').includes(`"liteVersion": "${v}",`));
-  assert.doesNotMatch(liteSkillText(LITE), /\(Lite (1\.11\.0|2\.0\.0|2\.1\.0|2\.1\.1)\)/);
+  assert.doesNotMatch(liteSkillText(LITE), /\(Lite (1\.11\.0|2\.0\.0|2\.1\.0|2\.1\.1|2\.1\.2)\)/);
 });

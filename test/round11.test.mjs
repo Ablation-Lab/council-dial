@@ -74,9 +74,9 @@ liteTest('holds only Markdown, JSON, the licence, plain repository files and the
   const files = liteFiles();
   const rel = files.map(f => path.relative(LITE, f).split(path.sep).join('/')).sort();
   assert.deepEqual(rel, [
-    '.claude-plugin/icon.png', '.claude-plugin/marketplace.json', '.claude-plugin/plugin.json',
+    '.claude-plugin/marketplace.json', '.claude-plugin/plugin.json',
     // Lite 2.0.0 dropped .gitattributes: every blob is LF already (checked below).
-    '.gitignore', 'LICENSE', 'README.md',
+    '.gitignore', 'CHANGELOG.md', 'LICENSE', 'README.md', 'icon.png',
     // The read-only agent the council's agents run as (a Markdown definition, not code).
     'agents/council-reader.md',
     'skills/council-dial-lite/SKILL.md',
@@ -105,7 +105,8 @@ liteTest('holds only Markdown, JSON, the licence, plain repository files and the
     assert.doesNotMatch(text, /council-dial\/(blob|tree)\/[^/\s]+\/lite\b|\]\(\.?\/lite\//, `${f} links to the old lite/ folder`);
   }
   assert.ok(fs.readFileSync(path.join(LITE, 'LICENSE')).equals(fs.readFileSync(path.join(ROOT, 'LICENSE'))));
-  assert.ok(fs.readFileSync(path.join(LITE, '.claude-plugin/icon.png')).equals(fs.readFileSync(path.join(ROOT, 'plugin/.claude-plugin/icon.png'))));
+  // Lite 2.2.0 keeps its icon at the plugin's top level, as the directory's structure guide asks.
+  assert.ok(fs.readFileSync(path.join(LITE, 'icon.png')).equals(fs.readFileSync(path.join(ROOT, 'plugin/.claude-plugin/icon.png'))));
   // No .gitattributes (Lite 2.0.0), and every committed text file is stored with LF line endings.
   assert.ok(!fs.existsSync(path.join(LITE, '.gitattributes')), 'Lite has no .gitattributes');
   const eol = git('ls-files', '--eol');
@@ -184,7 +185,7 @@ liteTest('SKILL.md keeps reports saved by their agents and checked, findings cop
   const front = skill.match(/^---\n([\s\S]*?)\n---\n/)[1];
   assert.match(front, /^name: council-dial-lite$/m);
   const desc = front.match(/^description: (.*)$/m)[1];
-  assert.match(desc, /^Council Dial Lite runs a review council .* with no script\./);
+  assert.match(desc, /^Use when the user asks for Council Dial Lite, or to run a review council/);
   // Agent Skills descriptions are at most 1024 characters; check both editions.
   assert.ok(desc.length <= 1024, `Lite's description is ${desc.length} characters`);
   assert.ok(read('plugin/skills/council-dial/SKILL.md').match(/^description: (.*)$/m)[1].length <= 1024);
@@ -192,7 +193,7 @@ liteTest('SKILL.md keeps reports saved by their agents and checked, findings cop
   assert.ok(skill.includes("1. The first line: `Reply with your full report and nothing else. Don't write or change any file, and open no file under <Lite folder>.` For the check, the last sentence is instead `Don't write or change any file, and open no file under <Lite folder> apart from those under Brief folder:, Report files:, Count files:, Summary file:, Brief files:, Overview file: and Overview sources: at the end of this message.`"));
   assert.ok(skill.includes("\n2. Its brief, built as section 3 says.\n3. For every agent except the check: the line `The material: <its paths>.`, giving the paths relative to the project root, exactly as the description does"));
   assert.ok(skill.includes("4. For agents that get other agents' reports, those reports; for the appeal, its `<dismissed>` and `<severity>` blocks (below); for the check, its file list (section 6).\n\nNo agent saves anything: you save every reply yourself (below), so the agents need no Write tool, and in brief version 3 they have none."));
-  assert.match(skill, /- Save its reply yourself, exactly, with the Write tool, to `<run folder>\/reports\/<agent file>`, and nowhere else: the only files you write are in the run folder\. Set `savedBy` to `main session`/);
+  assert.match(skill, /  1\. Save the reply yourself, exactly, with the Write tool, to `<run folder>\/reports\/<agent file>`, and nowhere else: the only files you write are in the run folder\. Set `savedBy` to `main session`/);
   assert.doesNotMatch(skill, /The save line|Last step, before you reply|save it with the Write tool to <run folder>/);
   assert.doesNotMatch(skill, /This is the only save line|then the save line for/);
   assert.match(readLite('skills/council-dial-lite/check-brief.md'), /Don't change or write anything; reply with your report\./);
@@ -204,13 +205,13 @@ liteTest('SKILL.md keeps reports saved by their agents and checked, findings cop
   assert.doesNotMatch(skill, /\.reply\.txt/);
   assert.match(skill, /Every path you give an agent outside the material line, `<run folder>`, `<Lite folder>`, and the check's file paths and its two folder lines included, is a full absolute path \(the check's brief-file names and template files are relative to those folder lines, section 6\); the material line gives the material's paths relative to the project root \(section 4\)\./);
   assert.match(skill, /a content search such as Grep can skip a git-ignored Lite folder/);
-  assert.match(skill, /Set an agent's `started` to `true` in the `run\.json` change you make just before its Agent call \(for agents started together, just before that one message\)\./);
+  assert.match(skill, /Set an agent's `started` to `true` in the `run\.json` change you make just before its Agent call\. For each agent \(or each group started together in one message\), in this order:/);
   assert.match(skill, /for each report the check's `\{\{rule\}\}` names, whether or not the summary uses it/);
   assert.match(skill, /The appeal: a verdict on a dismissed finding by that finding's number or label, and a severity verdict by the finding's M number/);
   assert.match(skill, /\(don't read the template files again\)/);
   assert.match(readLite('skills/council-dial-lite/check-brief.md'), /A line right after a heading that only says how many reviewers raised the finding isn't part of the finding\./);
   assert.match(skill, /including any heading, preamble or closing line it added although its brief says "No other text"/);
-  assert.match(skill, /Set `savedBy` to `main session`\. Then read the saved file back, in full, before anything uses it, and compare it with the reply, by the rule below, every time, and set `savedMatchesReply` to `true` or `false`\./);
+  assert.match(skill, /Set `savedBy` to `main session`\.\n  2\. Before anything uses it, read the saved file back, in full, and compare it with the reply, by the rule below\.\n  3\. Set `savedMatchesReply` to `true` or `false`\./);
   assert.match(skill, /\*\*Log every deviation\.\*\*/);
   assert.match(skill, /\*\*The deviation review\.\*\* Go through this checklist\. Each item is a deviation that earlier runs made and missed until asked:/);
   assert.match(skill, /Include section 8, which you've just done, in this pass\. Then set `deviationsReviewed` to `true` \(the top-level field, in the council's session\)\./);
@@ -278,7 +279,7 @@ liteTest('SKILL.md keeps reports saved by their agents and checked, findings cop
   const largest = count(['--reviewers', 'specialised', '--roles', 'a, b, c, d, e, f, g, h, i', '--combine', 'judged', '--debate', '--baseline']);
   assert.match(skill, new RegExp(`largest custom council is ${largest} agents with the check`));
   assert.match(readLite('README.md'), new RegExp(`up to ${largest} for the largest council`));
-  assert.match(skill, /`lite: specialised-2 \[api, perf\]\/judged\+debate\+appeal v3 @sonnet \(Lite 2\.1\.2\)`/);
+  assert.match(skill, /`lite: specialised-2 \[api, perf\]\/judged\+debate\+appeal v3 @sonnet \(Lite 2\.2\.0\)`/);
   assert.doesNotMatch(skill, /\bnode\b|council\.mjs|```(bash|sh|powershell)/i);
   // The maintainers' note (in the README's Maintainers section from Lite 1.11.0, not a hidden HTML comment
   // in SKILL.md) says where the briefs come from.
@@ -318,7 +319,7 @@ liteTest('Lite 1.2.0 sets a model and an effort per seat with the Agent tool\'s 
   assert.match(skill, /Whenever any seat has an effort set, tell the user, before you start any agent, that `CLAUDE_CODE_EFFORT_LEVEL`, if it's set in their shell or in a settings file's `env` block, overrides every seat's effort, and that they can check the shell with `\$env:CLAUDE_CODE_EFFORT_LEVEL` in PowerShell or `echo \$CLAUDE_CODE_EFFORT_LEVEL` in bash/);
   assert.match(skill, /- \*\*Blind:\*\* models and effort go only in the Agent tool's parameters, never in a prompt; only `run\.json` records them\./);
   assert.match(skill, /If every seat has the same model and effort: a space, `@` and that, or nothing if it's `inherit` with no effort\. Otherwise: a space, `@\{`, the seats as `<seat>=<model>` joined by `, `, and `\}`\./);
-  assert.match(skill, /`lite: specialised-3\/judged\+appeal v3 @\{reviewers=sonnet, judge=haiku, appeal=opus\/max, check=claude-opus-5-5\} \(Lite 2\.1\.2\)`/);
+  assert.match(skill, /`lite: specialised-3\/judged\+appeal v3 @\{reviewers=sonnet, judge=haiku, appeal=opus\/max, check=claude-opus-5-5\} \(Lite 2\.2\.0\)`/);
   assert.match(skill, /`lite: generalist-3\/pooled @sonnet\/high \(Lite 1\.2\.0\)`/);
   assert.match(skill, /A run logged before Lite 1\.2\.0 has no `type\.seats`: every seat had the alias the user picked for every subagent \(`models\.requested`\), and no effort\./);
   assert.match(skill, /Then give one line per seat, in this exact wording, the same in every run, raw or not:/);
@@ -350,8 +351,9 @@ liteTest('Lite 1.3.0 builds brief version 3 by default, keeps version 2, enforce
   assert.match(skill, /in brief version 3, `partlyReal` and `understated` are its PARTLY REAL and UNDERSTATED, and all five add up to it/);
   assert.match(skill, /In version 3, also `severityReviewed` and `severityItems`, one item for every severity finding it checked, fair ones included/);
   assert.match(skill, /show how often the appeal disagreed on each kind, so the LOW findings with no severity change, the part that costs most, can be judged on their own/);
-  assert.match(skill, /Only when at least one seat runs on another model than this session's \(and has no effort set\), Read the project's `\.claude\/settings\.local\.json` and `\.claude\/settings\.json` \(if they exist\) before the run/);
-  assert.match(skill, /use only their `modelSettings` and `effortLevel` keys/);
+  assert.match(skill, /Only when at least one seat runs on another model than this session's \(and has no effort set\), search the project's `\.claude\/settings\.local\.json` and `\.claude\/settings\.json` \(if they exist\) before the run with Grep/);
+  assert.match(skill, /Use only the `modelSettings` and `effortLevel` values Grep shows/);
+  assert.match(skill, /Never Read those files: their `env` block can hold secrets\./);
   assert.match(skill, /`## Appeal: WRONGLY DISMISSED, TOO LOW, TOO HIGH or UNSURE` \(version 3\)/);
   const check = sectionsOf(readLite('skills/council-dial-lite/check-brief.md'));
   assert.equal(check['rule-judged-v3'], "every finding in the judge's final ranked list, and no others from the judge's report.");
@@ -378,8 +380,8 @@ liteTest('the manifest names it the lighter edition, links the full one plainly,
   assert.equal(lite.name, 'council-dial-lite');
   assert.equal(lite.displayName, 'Council Dial Lite');
   assert.match(lite.version, /^\d+\.\d+\.\d+$/);
-  assert.match(lite.description, /^The lighter, script-free edition of Council Dial\./);
-  assert.match(lite.description, /for research runs, use the full Council Dial: https:\/\/github\.com\/Ablation-Lab\/council-dial\./);
+  assert.match(lite.description, /^The script-free edition of Council Dial, for Claude Code: /);
+  assert.doesNotMatch(lite.description, /https?:/);
   assert.doesNotMatch(lite.description, /\/plugin|install|--marketplace/i);
   assert.notEqual(lite.description, full.description);
   assert.equal(lite.license, 'MIT');
@@ -397,7 +399,7 @@ liteTest('the manifest names it the lighter edition, links the full one plainly,
 });
 
 liteTest('README explains the two editions, installs only Lite, and states only what was confirmed', () => {
-  const lite = readLite('README.md');
+  const lite = (readLite('README.md') + '\n' + readLite('CHANGELOG.md'));
   assert.match(lite, /^## Two editions$/m);
   // A plain link to the full edition and its README, and install steps for Lite only.
   assert.match(lite, /\[Council Dial\]\(https:\/\/github\.com\/Ablation-Lab\/council-dial\)/);
@@ -479,7 +481,7 @@ liteTest('README explains the two editions, installs only Lite, and states only 
   assert.match(lite, /Anthropic's platform-support page lists plugin agents \(`agents\/\*\.md`\) as ignored in chat, so the read-only agent isn't there\./);
   // The directory shows the README: at least 40 words outside code blocks, and the sign-off last.
   assert.ok(lite.replace(/```[\s\S]*?```/g, '').split(/\s+/).filter(Boolean).length >= 40);
-  assert.ok(lite.trimEnd().endsWith('\n\nResearch by Ablation Lab.'));
+  assert.ok(readLite('README.md').trimEnd().endsWith('\n\nResearch by Ablation Lab.'));
   assert.equal(lite.split('Research by Ablation Lab.').length, 2);
   for (const [l, prev] of lite.split('\n').map((l, i, a) => [l, a[i - 1]])) if (l.startsWith('#') && prev !== undefined) assert.equal(prev, '', `blank line before ${l}`);
 });

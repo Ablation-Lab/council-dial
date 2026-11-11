@@ -44,7 +44,7 @@ liteTest('templates: a file in the skill folder is read first, so one answer cov
 liteTest('read-backs may follow a batch of edits, in full; settings files only for a seat on another model; trial only for larger material', () => {
   const s = LITE_SKILL();
   assert.match(s, /After a change, or after a batch of targeted edits made one after another with no other tool calls in between, read the whole file back once, in full/);
-  assert.match(s, /when every seat is on this session's model, don't read them, since no saved level can apply, and that isn't a deviation/);
+  assert.match(s, /When every seat is on this session's model, don't search them, since no saved level can apply, and that isn't a deviation/);
   assert.match(s, /only when the material is more than 5 files or names a whole folder; for up to 5 named files, say a trial isn't needed\./);
 });
 
@@ -83,7 +83,7 @@ liteTest('the check compares the saved briefs with their templates, compares tex
   assert.deepEqual([...new Set([...text.matchAll(/\{\{([^}]+)\}\}/g)].map(m => m[1]))], ['rule']);
   const s = LITE_SKILL();
   assert.match(s, /a line `Brief files:`, then for each saved brief except the check's own, a line saying how you built it: `- <brief file name>: <template file> "<block>"`/);
-  assert.match(s, /Above that line, put two lines: `Brief folder: <full path of the run folder's briefs\/>`, then `Template folder: <full path of the skill folder>`\./);
+  assert.match(s, /Above the `Brief files:` line, put two lines: `Brief folder: <full path of the run folder's briefs\/>`, then `Template folder: <full path of the skill folder>`\./);
   assert.match(s, /"briefsMatch": n, "briefsDiffer": n, "briefsNotChecked": n, "overviewUnsupported": n\}` \(`overviewUnsupported` is `null` when there was no overview\), and set each checked brief's `briefChecks\[\]\.checkAgent` to `matches`, `differs` or `not checked`/);
   assert.match(s, /The check compares the saved copy, not the prompt as it was sent, so say that too\. If it doesn't differ, say the check was mistaken\./);
 });
@@ -96,7 +96,7 @@ liteTest('section 10 names the Edit rule, and says which session sets which devi
 });
 
 liteTest('README: the escaped-reply limit, and the 1.7.0 runs', () => {
-  const r = readLite('README.md');
+  const r = (readLite('README.md') + '\n' + readLite('CHANGELOG.md'));
   assert.match(r, /A reply that only looks escaped is still turned back\./);
   assert.match(r, /\*\*Lite 1\.7\.0, interactive, three councils\*\*/);
   assert.match(r, /The judge merged 24 reviewer findings \(10, 7 and 7\) into 16: 8 REAL, 3 PARTLY REAL, 3 OVERSTATED and 2 NOT REAL \(the split is from our run notes, not yet published\)\./);
