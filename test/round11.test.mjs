@@ -200,7 +200,7 @@ liteTest('SKILL.md keeps reports saved by their agents and checked, findings cop
   assert.doesNotMatch(readLite('skills/council-dial-lite/check-brief.md'), /The only file you may write/);
   assert.match(skill, /with its prompt built as section 4 says for `reports\/check\.txt`: no material lines, and in place of reports, its file list/);
   // What the interactive trials showed SKILL.md needed to say.
-  assert.match(skill, /Whenever you compare a saved report with its reply \(below\), whitespace at the very end \(spaces, tabs and line breaks after the last other character\) doesn't count, in the file or the reply, and nor does a line ending's style \(CRLF or LF\); every other difference does/);
+  assert.match(skill, /Whenever you compare a saved report with its reply \(below\), three kinds of difference don't count, in the file or the reply: spaces and tabs at the end of a line, including a line of only spaces or tabs \(the Write tool can drop them, and save such a line empty\); whitespace at the very end \(spaces, tabs and line breaks after the last other character\); and a line ending's style \(CRLF or LF\)\. Every other difference does/);
   // Lite 1.11.0 dropped the .reply.txt rule for runs before 1.4.0: no current step can reach one.
   assert.doesNotMatch(skill, /\.reply\.txt/);
   assert.match(skill, /Every path you give an agent outside the material line, `<run folder>`, `<Lite folder>`, and the check's file paths and its two folder lines included, is a full absolute path \(the check's brief-file names and template files are relative to those folder lines, section 6\); the material line gives the material's paths relative to the project root \(section 4\)\./);
@@ -211,7 +211,7 @@ liteTest('SKILL.md keeps reports saved by their agents and checked, findings cop
   assert.match(skill, /\(don't read the template files again\)/);
   assert.match(readLite('skills/council-dial-lite/check-brief.md'), /A line right after a heading that only says how many reviewers raised the finding isn't part of the finding\./);
   assert.match(skill, /including any heading, preamble or closing line it added although its brief says "No other text"/);
-  assert.match(skill, /Set `savedBy` to `main session`\.\n  2\. Before anything uses it, read the saved file back, in full, and compare it with the reply, by the rule below\.\n  3\. Set `savedMatchesReply` to `true` or `false`\./);
+  assert.match(skill, /Set `savedBy` to `main session`\.\n  2\. Before anything uses it, read the saved file back, in full, and compare it with the reply, by the rule below\.\n  3\. Set `savedMatchesReply` to `true` or `false`, and `trailingWhitespaceLines` to how many of its lines differed from the reply only by spaces or tabs at their end \(by the rule below\)\./);
   assert.match(skill, /\*\*Log every deviation\.\*\*/);
   assert.match(skill, /\*\*The deviation review\.\*\* Go through this checklist\. Each item is a deviation that earlier runs made and missed until asked:/);
   assert.match(skill, /Include section 8, which you've just done, in this pass\. Then set `deviationsReviewed` to `true` \(the top-level field, in the council's session\)\./);
@@ -279,7 +279,7 @@ liteTest('SKILL.md keeps reports saved by their agents and checked, findings cop
   const largest = count(['--reviewers', 'specialised', '--roles', 'a, b, c, d, e, f, g, h, i', '--combine', 'judged', '--debate', '--baseline']);
   assert.match(skill, new RegExp(`largest custom council is ${largest} agents with the check`));
   assert.match(readLite('README.md'), new RegExp(`up to ${largest} for the largest council`));
-  assert.match(skill, /`lite: specialised-2 \[api, perf\]\/judged\+debate\+appeal v3 @sonnet \(Lite 2\.2\.3\)`/);
+  assert.match(skill, /`lite: specialised-2 \[api, perf\]\/judged\+debate\+appeal v3 @sonnet \(Lite 2\.2\.4\)`/);
   assert.doesNotMatch(skill, /\bnode\b|council\.mjs|```(bash|sh|powershell)/i);
   // The maintainers' note (in the README's Maintainers section from Lite 1.11.0, not a hidden HTML comment
   // in SKILL.md) says where the briefs come from.
@@ -319,7 +319,7 @@ liteTest('Lite 1.2.0 sets a model and an effort per seat with the Agent tool\'s 
   assert.match(skill, /Whenever any seat has an effort set, tell the user, before you start any agent, that `CLAUDE_CODE_EFFORT_LEVEL`, if it's set in their shell or in a settings file's `env` block, overrides every seat's effort, and that they can check the shell with `\$env:CLAUDE_CODE_EFFORT_LEVEL` in PowerShell or `echo \$CLAUDE_CODE_EFFORT_LEVEL` in bash/);
   assert.match(skill, /- \*\*Blind:\*\* models and effort go only in the Agent tool's parameters, never in a prompt; only `run\.json` records them\./);
   assert.match(skill, /If every seat has the same model and effort: a space, `@` and that, or nothing if it's `inherit` with no effort\. Otherwise: a space, `@\{`, the seats as `<seat>=<model>` joined by `, `, and `\}`\./);
-  assert.match(skill, /`lite: specialised-3\/judged\+appeal v3 @\{reviewers=sonnet, judge=haiku, appeal=opus\/max, check=claude-opus-5-5\} \(Lite 2\.2\.3\)`/);
+  assert.match(skill, /`lite: specialised-3\/judged\+appeal v3 @\{reviewers=sonnet, judge=haiku, appeal=opus\/max, check=claude-opus-5-5\} \(Lite 2\.2\.4\)`/);
   assert.match(skill, /`lite: generalist-3\/pooled @sonnet\/high \(Lite 1\.2\.0\)`/);
   assert.match(skill, /A run logged before Lite 1\.2\.0 has no `type\.seats`: every seat had the alias the user picked for every subagent \(`models\.requested`\), and no effort\./);
   assert.match(skill, /Then give one line per seat, in this exact wording, the same in every run, raw or not:/);
