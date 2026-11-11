@@ -88,6 +88,14 @@ liteTest('run.md, report-and-log.md and summary-and-check.md: numbered lists, th
   assert.match(s6, /Above the `Brief files:` line, put two lines:/);
 });
 
+liteTest('a call the user changes: the item gets the new call, notes keep the earlier one, and it isn\'t a deviation', () => {
+  const s8 = liteSection(LITE, 8);
+  assert.match(s8, /`notes` never states the user's calls or says one is pending: the appeal items hold them\. The one exception is a call the user changes later \(below\)\./);
+  assert.match(s8, /\*\*A call the user changes\.\*\* If the user changes a call already logged, set that item's `call` and `userSeverity` to the new call, as above, and add one sentence to `results\.notes` giving the earlier call/);
+  assert.match(s8, /It isn't a deviation: `deviations` are only for what you did differently from this skill\./);
+  assert.match(readLite('README.md'), /If you change a call later, the item gets the new one and the run's `notes` keep the earlier one\./);
+});
+
 liteTest('manifests: the icon at the top level, and a two-sentence description for Claude Code with no URL', () => {
   const j = JSON.parse(readLite('.claude-plugin/plugin.json'));
   const m = JSON.parse(readLite('.claude-plugin/marketplace.json')).plugins[0];
