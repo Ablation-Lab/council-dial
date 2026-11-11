@@ -69,10 +69,10 @@ liteTest('the raw run\'s routing stays in section 5, section 9 points to section
   // Older Read tools cut lines over 2,000 characters; the skill's other files are read with Read.
   for (const f of Object.keys(LITE_STEP_FILES)) for (const line of readSkill(f).split('\n')) assert.ok(line.length <= 2000, `${f} has a ${line.length}-character line`);
   assert.match(liteSection(LITE, 3), /Read `\$\{CLAUDE_SKILL_DIR\}\/check-brief\.md` first \(in a raw run, `\$\{CLAUDE_SKILL_DIR\}\/raw-handoff\.md`\), before any file in `briefs\/`\. A read's prompt offers to allow reading the folder that file is in for the session/);
-  const s = readSkill('SKILL.md');
-  assert.match(s, /Whenever you do anything differently from this skill, in this file or a step file \(a step skipped/);
+  const s = readSkill('report-and-log.md');
+  assert.match(s, /Whenever you do anything differently from this skill, in SKILL\.md or a step file \(a step skipped/);
   assert.match(s, /A step this skill requires isn't a deviation/);
-  assert.match(s, /After that, read it only where a step asks you to/);
+  assert.match(readSkill('SKILL.md'), /After that, read it only where a step asks you to/);
   assert.doesNotMatch(liteSkillText(LITE), /this file (asks|requires)|differently from this file/);
 });
 
@@ -83,12 +83,12 @@ liteTest('the hand-off notes, the README and the version point to the step files
   assert.doesNotMatch(h, /SKILL\.md section|table in SKILL\.md/);
   const r = fs.readFileSync(path.join(LITE, 'README.md'), 'utf8') + '\n' + fs.readFileSync(path.join(LITE, 'CHANGELOG.md'), 'utf8');
   assert.match(r, /`skills\/council-dial-lite\/SKILL\.md` and its six step files \(`plan\.md`, `run\.md`, `summary-and-check\.md`, `report-and-log\.md`, `comparisons\.md` and `raw\.md`, next to it\) are what Claude follows/);
-  assert.match(r, /SKILL\.md as loaded \(with its paths filled in for an installed copy\) is about 4,990 tokens on both Opus 5\.5 and Sonnet 5\.5/);
+  assert.match(r, /SKILL\.md as loaded \(with its paths filled in for an installed copy\) is about 4,480 tokens on both Opus 5\.5 and Sonnet 5\.5/);
   assert.match(r, /\(section 10 of the skill, in `raw\.md`, then sections 5, 7 and 8\)/);
   assert.match(r, /Lite 2\.0\.0 moves the steps out of SKILL\.md into six files next to it, word for word, apart from a few wording changes the move needed\./);
   assert.doesNotMatch(r, /section 10 of SKILL\.md/);
   const v = JSON.parse(fs.readFileSync(path.join(LITE, '.claude-plugin/plugin.json'), 'utf8')).version;
-  assert.equal(v, '2.2.2');
+  assert.equal(v, '2.2.3');
   assert.ok(readSkill('plan.md').includes(`"liteVersion": "${v}",`));
   assert.doesNotMatch(liteSkillText(LITE), /\(Lite (1\.11\.0|2\.0\.0|2\.1\.0|2\.1\.1|2\.1\.2|2\.2\.0|2\.2\.1)\)/);
 });
