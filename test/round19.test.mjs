@@ -56,8 +56,9 @@ liteTest('the description is paths, exclusions and the user\'s words only; the s
 
 liteTest('the severity block and severityChanges: a missing reason line, heading-only claims, split findings, NOT REAL findings, appealSeverity', () => {
   const s = LITE_SKILL();
-  assert.match(s, /for OVERSTATED or UNDERSTATED, whose brief requires a reason line, the words `the judge gave no reason line`/);
-  assert.match(s, /such as a judge's missing reason line \(`OVERSTATED M10 with no reason line`\)/);
+  // From Lite 2.2.4 Claude never decides that a ruling has no reason, so neither the block nor notes say so.
+  assert.doesNotMatch(s, /the judge gave no reason line|no reason given/);
+  assert.match(s, /such as an appeal's missing count \(`no count line`\)/);
   assert.match(s, /If the merged-list entry is only a heading \(such as a bold `M4\. <text>`\) with no separate description, use the heading's text without its number \(with the colon or full stop after it\) and its bold or italic markers/);
   assert.match(s, /keep code-span backticks, which are part of the text/);
   assert.match(s, /- \*\*A split finding\.\*\* When the judge splits one reviewer finding into several merged findings, that reviewer's severity counts for each of them, unless the judge lists that reviewer on a part only for a side remark \(next rule\)\./);

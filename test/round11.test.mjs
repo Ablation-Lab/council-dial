@@ -301,7 +301,7 @@ liteTest('Lite 1.1.2 takes on what the appeal stress-test run showed, where it a
   const json = JSON.parse(skill.match(/\*\*run\.json\.\*\* Write it with this shape[^\n]*\n\n```json\n([\s\S]*?)\n```/)[1]);
   assert.ok(Object.hasOwn(json.agents[0], 'replyUnescaped'));
   // Every severity change flagged by Claude, up or down; the judge brief stays the shared one.
-  assert.match(skill, /list every one that differs, up or down, including where reviewers disagreed and the judge took one of their ratings: its citation, each reviewer's severity, the judge's, and the judge's reason, quoted, if it gave one/);
+  assert.match(skill, /list every one that differs, up or down, including where reviewers disagreed and the judge took one of their ratings: its citation, each reviewer's severity, the judge's, and the judge's reason as the rule below says\./);
   assert.match(skill, /- `severityChanges`: for judged, the list from section 7/);
   // Durations are wall-clock, approvals included.
   assert.match(skill, /`durationMs` is wall-clock time: in Manual mode it includes any time the agent waited for the user to approve a permission prompt, so it isn't pure model time\. Say so whenever you show times or critical paths\./);

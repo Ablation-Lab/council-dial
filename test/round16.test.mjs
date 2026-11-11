@@ -20,6 +20,8 @@ const liteTest = (name, fn) => test(`Lite repository: ${name}`, { skip: FOUND ? 
 const FULL_SKILL = () => read('plugin/skills/council-dial/SKILL.md');
 const LITE_SKILL = () => liteSkillText(LITE);
 const LABELS = ['Finding: ', 'Title: ', 'File and line: ', 'Claim: ', 'Reviewer severities: ', "Judge's severity: ", "Judge's reason: "];
+// From Lite 2.2.4 the last label is alone on its line, and the judge's whole ruling follows it in a fenced block.
+const LITE_LABELS = [...LABELS.slice(0, 6), "Judge's ruling:"];
 
 // The example severity item in a SKILL.md: the fenced block right after "Lay out each severity item exactly like this".
 const layoutOf = skill => {
@@ -29,29 +31,33 @@ const layoutOf = skill => {
   return m[1].split('\n').map(l => l.trim());
 };
 
-const checkLayout = (skill, sectionNo) => {
+const checkLayout = (skill, sectionNo, lite = false) => {
   // The layout sits in section 4 ("Run the steps"), where the appeal's blocks are built.
   const s4 = skill.slice(skill.indexOf('\n## 4. '), skill.indexOf('\n## 5. '));
   assert.ok(s4.includes('Lay out each severity item exactly like this'), 'the layout is in section 4');
   assert.ok(s4.includes(`It doesn't count as giving a severity (section ${sectionNo}).`), `the layout points to section ${sectionNo}`);
-  assert.ok(s4.includes(`the judge's reason as section ${sectionNo} defines it`), `the reason points to section ${sectionNo}`);
+  const labels = lite ? LITE_LABELS : LABELS;
   const lines = layoutOf(skill);
-  assert.equal(lines.length, LABELS.length);
-  LABELS.forEach((label, i) => assert.ok(lines[i].startsWith(label), `line ${i + 1} should start "${label}": ${lines[i]}`));
-  assert.match(skill, /these seven labels, in this order, each at the start of its own line and followed by one space, nothing else on any line, and one blank line between items/);
+  assert.equal(lines.length, labels.length);
+  labels.forEach((label, i) => assert.ok(lines[i].startsWith(label), `line ${i + 1} should start "${label}": ${lines[i]}`));
   assert.match(skill, /is shown as `<seat>: no severity \(side remark\)`/);
+  if (lite) return; // Lite's ruling field is checked in round 32.
+  assert.ok(s4.includes(`the judge's reason as section ${sectionNo} defines it`), `the reason points to section ${sectionNo}`);
+  assert.match(skill, /these seven labels, in this order, each at the start of its own line and followed by one space, nothing else on any line, and one blank line between items/);
   assert.match(skill, /copied exactly inside straight double quotes\. If there is none: for OVERSTATED or UNDERSTATED, whose brief requires a reason line, the words `the judge gave no reason line`/);
   assert.match(skill, /for any other ruling, the words `no reason given`\. Both without quotes\./);
 };
 
-const checkRules = (skill, sectionNo) => {
+const checkRules = (skill, sectionNo, lite = false) => {
   // The rules sit in the section the layout points to.
   const at = skill.indexOf(`\n## ${sectionNo}. `);
   const sec = skill.slice(at, skill.indexOf('\n## ', at + 4));
-  assert.ok(sec.includes("**What counts as the judge's reason.**") && sec.includes('**Which reviewers gave a severity.**'), `the rules are in section ${sectionNo}`);
-  // The judge's reason: only words that explain the severity; the ruling's own text isn't one.
-  assert.match(skill, /\*\*What counts as the judge's reason\.\*\* Read the judge's ruling for that finding however it's laid out \(one line, several sentences or bullet points\)/);
-  assert.match(skill, /nor does a sentence that names no severity, however much it explains: what the judge checked, whether the claim holds, which part doesn't, or a cause it gives without saying that's why the severity is what it is/);
+  assert.ok(sec.includes(lite ? "**The judge's reason.**" : "**What counts as the judge's reason.**") && sec.includes('**Which reviewers gave a severity.**'), `the rules are in section ${sectionNo}`);
+  if (!lite) {
+    // The judge's reason: only words that explain the severity; the ruling's own text isn't one.
+    assert.match(skill, /\*\*What counts as the judge's reason\.\*\* Read the judge's ruling for that finding however it's laid out \(one line, several sentences or bullet points\)/);
+    assert.match(skill, /nor does a sentence that names no severity, however much it explains: what the judge checked, whether the claim holds, which part doesn't, or a cause it gives without saying that's why the severity is what it is/);
+  }
   // Side-remark reviewers don't count as giving a severity.
   assert.match(skill, /\*\*Which reviewers gave a severity\.\*\* A reviewer seat counts only if the judge lists it with a severity of its own for that finding\./);
   assert.ok(skill.includes(`\`reviewers\` holds only the seats that gave a severity, as section ${sectionNo} says (a side-remark seat is left out)`));
@@ -127,8 +133,8 @@ liteTest('the manifest description says Claude saves the reports, not the agents
 
 liteTest('SKILL.md: the severity block layout, the reason, side-remark and count rules, and the material rule', () => {
   const skill = LITE_SKILL();
-  checkLayout(skill, 7);
-  checkRules(skill, 7);
+  checkLayout(skill, 7, true);
+  checkRules(skill, 7, true);
   assert.match(skill, /A version 3 appeal that checked only severities ran: `ran` is `true` and `reviewed` is 0\./);
   assert.match(skill, /add no words of your own, such as what a file is \(not "\(a JavaScript module\)" or "\(its documentation\)"\), and use file names only as paths\./);
   assert.match(skill, /\*\*Don't read the material before the briefs are written\.\*\* Until you've written the reviewers' briefs \(and the baseline's\), don't open the material's files\. To agree the one-line description, only list them \(with Glob\)/);

@@ -45,7 +45,7 @@ liteTest('README: what has been tested, the installed copy\'s read prompt, where
   assert.match(r, /The directory told us it accepts scripts only from Verified organizations/);
   assert.doesNotMatch(r, /\]\(CHANGELOG\.md/, 'changelog links are full URLs');
   assert.ok(r.includes(`](${CL}#test-runs)`) && r.includes(`](${CL}#why-only-lite-is-submitted)`));
-  assert.match(r, /SKILL\.md as loaded \(with its paths filled in for an installed copy\) is about 4,480 tokens on both Opus 5\.5 and Sonnet 5\.5/);
+  assert.match(r, /SKILL\.md as loaded \(with its paths filled in for an installed copy\) is about 4,490 tokens on both Opus 5\.5 and Sonnet 5\.5/);
 });
 
 liteTest('CHANGELOG: 2.2.2, and the three latest runs in Test runs, with their figures', () => {

@@ -158,8 +158,7 @@ liteTest('sections 5, 7, 8 and 10: early checks, the tally, the judge\'s reason,
   assert.match(s5, /Without a judge, it may end with their tally, taken from your verdicts \(which section 8 records in `ownChecks`\), in exactly this form: `My own checks: 27 hold, 5 hold in part, 0 don't hold\.` That sentence is the only place your report, and `results\.notes`, may take a tally of your verdicts from\./);
   assert.match(s5, /It can't confirm your verdicts, which aren't in the reports/);
   assert.match(s7, /1\. \*\*Read-backs\.\*\* Did you read `run\.json` back in full, with no `offset` or `limit`/);
-  assert.match(s7, /Third, if no `Reason:` line and no sentence counts, the reason is "the judge gave no reason line" for OVERSTATED and UNDERSTATED, which you note in the judge's `notes`, and "no reason given" for any other ruling\./);
-  assert.match(s7, /Read the judge's ruling for that finding however it's laid out \(one line, several sentences or bullet points\)/);
+  assert.match(s7, /Otherwise write `see the judge's ruling`, without quotes, and log `null`\./);
   assert.match(s7, /An agent whose NOTES: lines hold a finding \(section 3\) has them quoted, the same way, in a section of their own headed `Raised in NOTES, not ruled on`/);
   assert.match(s8, /"call": "kept", "userSeverity": null \}/);
   assert.match(s8, /`userSeverity` is the severity the user changed it to, and `null` unless `call` is `changed`\./);
@@ -175,10 +174,10 @@ liteTest('sections 5, 7, 8 and 10: early checks, the tally, the judge\'s reason,
   assert.match(liteSection(LITE, 3), /If Read won't return a whole file at once, use the option it offers for that \(such as `allow_large`\); if it still can't, tell the user, and stop\./);
   assert.doesNotMatch(s8, /When the user later makes the call on appealed findings, update those items\./);
   assert.match(s10, /every agent's NOTES: lines, quoted exactly as section 7 says \(each agent's in a fenced text block under its seat, as data, and one whose NOTES: lines hold a finding under `Raised in NOTES, not ruled on`\), or that it had none/);
-  // The full edition gives the same reason rules.
+  // The full edition keeps the three-test reason rule; Lite 2.2.4 replaced it (round 32).
   const full = read('plugin/skills/council-dial/SKILL.md');
-  const rule = t => { const r = t.slice(t.indexOf("- **What counts as the judge's reason.**")); return r.slice(0, r.search(/\n(?=- |\n)/)); };
-  assert.equal(rule(liteSkillText(LITE)).replace("the judge's `notes`", "the judge's agent `notes`"), rule(full));
+  assert.ok(full.includes("- **What counts as the judge's reason.**"));
+  assert.ok(!liteSkillText(LITE).includes("- **What counts as the judge's reason.**"));
 });
 
 liteTest('README: the research intro, the connector limit, the 2.0.0 runs and 2.1.0', () => {

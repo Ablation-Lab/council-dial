@@ -17,12 +17,12 @@ const readLite = f => fs.readFileSync(path.join(LITE, f), 'utf8');
 const FULL = () => read('plugin/skills/council-dial/SKILL.md');
 const rule = t => { const r = t.slice(t.indexOf("- **What counts as the judge's reason.**")); return r.slice(0, r.search(/\n(?=- |\n)/)); };
 
-const SHORT = '- **Log every deviation.** Whenever you do anything differently from this skill, in this file or a step file, add one line saying what and why to the run\'s `deviations` list in `run.json` as soon as you notice (before `run.json` exists, as soon as you write it), with the exact text of anything you added to or changed in a prompt (no secrets, and nothing else quoted from the material or the reports). What the user asked for goes in `userRequests`, and an instruction from outside this skill and the user\'s messages in `outsideInstructions`, so the deviations stay a count of your own slips. The full rule is in section 7, under "Logging deviations": read it before the deviation review, and whenever you\'re unsure what counts.';
+const SHORT = '- **Log every deviation.** Whenever you do anything differently from this skill, in this file or a step file, add one line saying what and why to the run\'s `deviations` list in `run.json` as soon as you notice (before `run.json` exists, as soon as you write it), with the exact text of anything you added to or changed in a prompt (no secrets, and nothing else quoted from the material or the reports). What the user asked you to do differently goes in `userRequests`, and an instruction from outside this skill and the user\'s messages in `outsideInstructions`, so the deviations stay a count of your own slips. The full rule is in section 7, under "Logging deviations": read it before the deviation review, and whenever you\'re unsure what counts.';
 
 liteTest('SKILL.md: a short deviation rule, last, and the file stays small', () => {
   const s = readLite('skills/council-dial-lite/SKILL.md');
   assert.ok(s.endsWith(SHORT + '\n'), 'the short version is the last rule');
-  // Measured at about 4,480 tokens as loaded with a 121-character path (13,056 bytes on disk). Keep it from growing.
+  // Measured at about 4,490 tokens as loaded with a 121-character path (13,074 bytes on disk). Keep it from growing.
   assert.ok(Buffer.byteLength(s) <= 13100, `SKILL.md is ${Buffer.byteLength(s)} bytes; keep it under 4,500 tokens as loaded`);
   assert.doesNotMatch(s, /Two other kinds of difference aren't deviations either/);
   assert.doesNotMatch(s, /with `\(after review\)` after it instead/);
@@ -86,9 +86,9 @@ const CASES = [
   },
 ];
 
-liteTest('the judge\'s reason: three tests in order, a case for each, the same in both editions', () => {
-  const lite = rule(readLite('skills/council-dial-lite/report-and-log.md')), full = rule(FULL());
-  assert.equal(lite.replace("which you note in the judge's `notes`", "which you note in the judge's agent `notes`"), full);
+liteTest('the full edition\'s judge\'s reason: three tests in order, a case for each', () => {
+  // Lite 2.2.4 replaced this rule with a single Reason: line (round 32); the full edition keeps it.
+  const lite = rule(FULL()).replace("which you note in the judge's agent `notes`", "which you note in the judge's `notes`");
   assert.equal(lite.split('\n').length, 3, 'one line per test');
   for (const line of lite.split('\n')) assert.ok(line.length <= 2000, `a ${line.length}-character line`);
   assert.ok(lite.indexOf('First, a line headed `Reason:`') < lite.indexOf('\nSecond, ') && lite.indexOf('\nSecond, ') < lite.indexOf('\nThird, '));
@@ -98,8 +98,7 @@ liteTest('the judge\'s reason: three tests in order, a case for each, the same i
   }
 });
 
-liteTest('the appeal\'s severity block takes the reason section 7 defines, in both editions; the brief is unchanged', () => {
-  assert.match(liteSection(LITE, 4), /`Judge's reason:` the judge's reason as section 7 defines it, copied exactly inside straight double quotes/);
+liteTest('the full edition\'s severity block takes the reason section 5 defines; the brief is unchanged', () => {
   assert.match(FULL(), /`Judge's reason:` the judge's reason as section 5 defines it, copied exactly inside straight double quotes/);
   const b = 'briefs/v3/appeal.md';
   assert.equal(readLite('skills/council-dial-lite/' + b), read('plugin/skills/council-dial/' + b));
@@ -107,9 +106,9 @@ liteTest('the appeal\'s severity block takes the reason section 7 defines, in bo
 
 liteTest('README and CHANGELOG: 2.2.3, the measured size, and the 2.2.2 installed run', () => {
   const r = readLite('README.md'), c = readLite('CHANGELOG.md');
-  assert.match(r, /SKILL\.md as loaded \(with its paths filled in for an installed copy\) is about 4,480 tokens on both Opus 5\.5 and Sonnet 5\.5, with a 121-character install path/);
-  assert.match(r, /pasting the same text into a plain prompt gave 4,454/);
-  assert.match(r, /- After a compaction, Claude Code keeps SKILL\.md \(about 4,480 tokens in our measurement/);
+  assert.match(r, /SKILL\.md as loaded \(with its paths filled in for an installed copy\) is about 4,490 tokens on both Opus 5\.5 and Sonnet 5\.5, with a 121-character install path/);
+  assert.match(r, /pasting the same text into a plain prompt gave 4,458/);
+  assert.match(r, /- After a compaction, Claude Code keeps SKILL\.md \(about 4,490 tokens in our measurement/);
   assert.match(r, /one claude\.ai connector's instructions added about 710 tokens to each council agent's context/);
   assert.doesNotMatch(c, /## Planned/);
   assert.ok(c.indexOf('## 2.2.3') < c.indexOf('## 2.2.2'));
