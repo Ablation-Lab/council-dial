@@ -58,7 +58,7 @@ liteTest('the severity block and severityChanges: a missing reason line, heading
   const s = LITE_SKILL();
   assert.match(s, /for OVERSTATED or UNDERSTATED, whose brief requires a reason line, the words `the judge gave no reason line`/);
   assert.match(s, /such as a judge's missing reason line \(`OVERSTATED M10 with no reason line`\)/);
-  assert.match(s, /If the merged-list entry is only a heading \(such as a bold `M4\. <text>`\) with no separate description, use the heading's text without its number and its bold or italic markers/);
+  assert.match(s, /If the merged-list entry is only a heading \(such as a bold `M4\. <text>`\) with no separate description, use the heading's text without its number \(with the colon or full stop after it\) and its bold or italic markers/);
   assert.match(s, /keep code-span backticks, which are part of the text/);
   assert.match(s, /- \*\*A split finding\.\*\* When the judge splits one reviewer finding into several merged findings, that reviewer's severity counts for each of them, unless the judge lists that reviewer on a part only for a side remark \(next rule\)\./);
   assert.match(s, /Only findings the judge kept \(any ruling but NOT REAL\) can be severity changes: a NOT REAL finding has no final severity, so it's left out/);

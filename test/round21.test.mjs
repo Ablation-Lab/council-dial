@@ -78,7 +78,7 @@ liteTest('the nested-placeholder example matches its rule, and the plan names th
 liteTest('severity block: heading-only claims keep code spans; a judge\'s reason drops its severity list', () => {
   const s = LITE_SKILL();
   assert.match(s, /keep code-span backticks, which are part of the text/);
-  assert.match(s, /leave out a list of severities the judge puts before them, such as "Correctness HIGH, security MED, mine MED\."/);
+  assert.match(s, /and leave out the list of severities it starts with, such as "Correctness HIGH, security MED, mine MED\." or "Correctness MED, security LOW; my severity LOW\.", which the block already gives/);
 });
 
 liteTest('README: the check\'s cost and the 1.9.0 runs', () => {

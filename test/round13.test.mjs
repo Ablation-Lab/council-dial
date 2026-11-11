@@ -123,7 +123,7 @@ test('an exclusion in the target line reaches every brief', () => {
 // 4. Nothing added to prompts; deviations logged with their exact text.
 test('SKILL.md forbids additions to an agent\'s prompt and has every departure logged with its exact text', () => {
   const s = read('plugin/skills/council-dial/SKILL.md');
-  assert.match(s, /Add nothing else: no notes about the material, no instructions on numbering or format, and never a file path in place of a report\. If you do depart from this, or from anything else in this file, add an entry to `deviations` when you log the results, with the exact text you added or changed and why\./);
+  assert.match(s, /Add nothing else: no notes about the material, no instructions on numbering or format, and never a file path in place of a report\. If you do depart from this, or from anything else in this file, add an entry to `deviations` \(or to `userRequests`, when the user asked for it\) when you log the results, with the exact text you added or changed and why\./);
   assert.match(s, /- `deviations`: one string per departure from this file, with the exact text you added or changed and why; empty if none\./);
 });
 
@@ -220,7 +220,7 @@ test('the READMEs and SKILL.md describe effort per seat, the troubleshooting ent
     assert.match(s, /\*\*"unexpected EOF while looking for matching" or a garbled report:\*\* the text was put in the command with a heredoc or quotes\. Write it to a file and pass `--input <file>`/, f);
     assert.match(s, /save it again with `--notice-escaped --replace`/, f);
     assert.match(s, /any file Claude gives it with `--input`/, f);
-    assert.match(s, /each seat's effort; each severity change the judge made, .*each deviation from the skill's instructions, with the exact text Claude added or changed \(up to 2,000 characters each\); whether each saved report was unescaped from a completion notice;/, f);
+    assert.match(s, /each seat's effort; each severity change the judge made, .*each deviation from the skill's instructions, with the exact text Claude added or changed \(up to 2,000 characters each\), and, apart from those, each change you asked for and each instruction Claude found outside the skill, with what you decided; whether each saved report was unescaped from a completion notice;/, f);
     assert.match(s, /Anything you want left out, such as a folder of sample data, goes in the one-line description of the target/, f);
     assert.match(s, /every finding whose severity the judge set differently from a reviewer's, up or down/, f);
   }

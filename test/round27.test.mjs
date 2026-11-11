@@ -71,7 +71,7 @@ liteTest('plan.md: untested presets, the check after the fallback, Grep for sett
   assert.doesNotMatch(s1, /Read the project's `\.claude\/settings/);
   assert.match(s1, /by Claude Code's changelog; its environment-variable reference doesn't list it/);
   assert.match(s2, /and is all the council's prompts say about the target apart from its paths/);
-  assert.match(s3, /If that write also creates the Lite folder \(the link check found it didn't exist\), tell the user in one line that the reports will quote their material/);
+  assert.match(s3, /If this run creates the Lite folder, tell the user once, in one line, that the reports will quote their material[^]*Say it in the plan message \(section 2\) when the instruction-file search there found no Lite folder; otherwise say it when `run\.json`'s write creates the folder\. Either is a step this skill requires, not a deviation\./);
   assert.match(s3, /If a role has no letter or digit from `a` to `z` and `0` to `9` \(such as one written only in another script\), use `reviewer <k>` in its place for the file name/);
   assert.match(s3, /For each agent \(or each group started together in one message\), in this order:\n1\. Save its brief/);
   assert.match(s3, /Read it back even after an edit that succeeded: the read-back is how this skill checks the file/);
@@ -83,7 +83,7 @@ liteTest('run.md, report-and-log.md and summary-and-check.md: numbered lists, th
   assert.match(s4, /- Save its reply and check the saved file, in this order, every time:\n  1\. /);
   assert.match(s4, /In a raw run, once every council agent has finished and its reply is saved, go to section 10 \(`raw\.md`\): the council session skips sections 5 to 8\./);
   assert.match(s7, /After the findings, the report has these parts, in this order \(leave out any the run doesn't have\):\n1\. \*\*The baseline:\*\*/);
-  assert.equal((s7.match(/^[1-9]\. \*\*/gm) || []).length, 9 + 8, 'the checklist\'s 8 items and the report\'s 9 parts');
+  assert.equal((s7.match(/^[1-9]\. \*\*/gm) || []).length, 9 + 9, 'the checklist\'s 9 items and the report\'s 9 parts');
   assert.match(s7, /did you search the project's settings files with Grep, and not Read them \(section 1\)\?/);
   assert.match(s6, /Above the `Brief files:` line, put two lines:/);
 });

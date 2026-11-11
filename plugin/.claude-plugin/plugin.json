@@ -1,7 +1,7 @@
 {
   "name": "council-dial",
   "displayName": "Council Dial",
-  "version": "1.8.0",
+  "version": "1.9.0",
   "description": "Runs a review council of Claude subagents the way you choose, read-only by default, and logs each run. A local script writes the briefs and records the results (findings, kept and dismissed, fixes that later failed), so council types can be compared. A council can flag an rm -rf that could delete the wrong data, as well as bugs, security issues and wrong docs, but may miss some. Needs Node.js; the script writes only the review log and the agents' saved reports, and makes no network requests.",
   "author": {
     "name": "Ablation Lab"

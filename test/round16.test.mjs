@@ -50,8 +50,8 @@ const checkRules = (skill, sectionNo) => {
   const sec = skill.slice(at, skill.indexOf('\n## ', at + 4));
   assert.ok(sec.includes("**What counts as the judge's reason.**") && sec.includes('**Which reviewers gave a severity.**'), `the rules are in section ${sectionNo}`);
   // The judge's reason: only words that explain the severity; the ruling's own text isn't one.
-  assert.match(skill, /\*\*What counts as the judge's reason\.\*\* Only the words in which the judge says why the finding has its severity/);
-  assert.match(skill, /The rest of the ruling \(what the judge checked, whether the claim holds, which part doesn't\) isn't a reason for the severity, even when it's all the ruling says; then the reason is "no reason given"\./);
+  assert.match(skill, /\*\*What counts as the judge's reason\.\*\* Read the judge's ruling for that finding however it's laid out \(one line, several sentences or bullet points\)/);
+  assert.match(skill, /nor does a sentence that names no severity, however much it explains: what the judge checked, whether the claim holds, which part doesn't, or a cause it gives without saying that's why the severity is what it is/);
   // Side-remark reviewers don't count as giving a severity.
   assert.match(skill, /\*\*Which reviewers gave a severity\.\*\* A reviewer seat counts only if the judge lists it with a severity of its own for that finding\./);
   assert.ok(skill.includes(`\`reviewers\` holds only the seats that gave a severity, as section ${sectionNo} says (a side-remark seat is left out)`));

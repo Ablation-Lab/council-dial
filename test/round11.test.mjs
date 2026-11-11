@@ -279,7 +279,7 @@ liteTest('SKILL.md keeps reports saved by their agents and checked, findings cop
   const largest = count(['--reviewers', 'specialised', '--roles', 'a, b, c, d, e, f, g, h, i', '--combine', 'judged', '--debate', '--baseline']);
   assert.match(skill, new RegExp(`largest custom council is ${largest} agents with the check`));
   assert.match(readLite('README.md'), new RegExp(`up to ${largest} for the largest council`));
-  assert.match(skill, /`lite: specialised-2 \[api, perf\]\/judged\+debate\+appeal v3 @sonnet \(Lite 2\.2\.0\)`/);
+  assert.match(skill, /`lite: specialised-2 \[api, perf\]\/judged\+debate\+appeal v3 @sonnet \(Lite 2\.2\.1\)`/);
   assert.doesNotMatch(skill, /\bnode\b|council\.mjs|```(bash|sh|powershell)/i);
   // The maintainers' note (in the README's Maintainers section from Lite 1.11.0, not a hidden HTML comment
   // in SKILL.md) says where the briefs come from.
@@ -293,7 +293,7 @@ liteTest('Lite 1.1.2 takes on what the appeal stress-test run showed, where it a
   assert.match(skill, /If anything next to it is out of scope, such as a folder of sample data, say so in the same line, .*: this line is the only description of the target the briefs get, so an exclusion you only tell the user doesn't reach the agents\./);
   // Nothing added to a prompt; any departure logged with its exact text.
   assert.match(skill, /Add nothing else to any prompt: no notes about the material, no instructions on numbering or format, and never a file path in place of a report\./);
-  assert.match(skill, /If you do add or change anything, log it in `deviations` with the exact text and why\./);
+  assert.match(skill, /If you do add or change anything, log it with the exact text and why: in `userRequests` when the user asked for it, and otherwise in `deviations`\./);
   assert.match(skill, /with the exact text of anything you added to or changed in a prompt/);
   // Escaped characters turned back when saving too, and recorded per agent.
   assert.match(skill, /So treat a reply as escaped only if it has at least one `&lt;`, `&gt;` or `&amp;`, and no `<`, no `>` and no `&` that isn't the start of one of those three/);
@@ -319,7 +319,7 @@ liteTest('Lite 1.2.0 sets a model and an effort per seat with the Agent tool\'s 
   assert.match(skill, /Whenever any seat has an effort set, tell the user, before you start any agent, that `CLAUDE_CODE_EFFORT_LEVEL`, if it's set in their shell or in a settings file's `env` block, overrides every seat's effort, and that they can check the shell with `\$env:CLAUDE_CODE_EFFORT_LEVEL` in PowerShell or `echo \$CLAUDE_CODE_EFFORT_LEVEL` in bash/);
   assert.match(skill, /- \*\*Blind:\*\* models and effort go only in the Agent tool's parameters, never in a prompt; only `run\.json` records them\./);
   assert.match(skill, /If every seat has the same model and effort: a space, `@` and that, or nothing if it's `inherit` with no effort\. Otherwise: a space, `@\{`, the seats as `<seat>=<model>` joined by `, `, and `\}`\./);
-  assert.match(skill, /`lite: specialised-3\/judged\+appeal v3 @\{reviewers=sonnet, judge=haiku, appeal=opus\/max, check=claude-opus-5-5\} \(Lite 2\.2\.0\)`/);
+  assert.match(skill, /`lite: specialised-3\/judged\+appeal v3 @\{reviewers=sonnet, judge=haiku, appeal=opus\/max, check=claude-opus-5-5\} \(Lite 2\.2\.1\)`/);
   assert.match(skill, /`lite: generalist-3\/pooled @sonnet\/high \(Lite 1\.2\.0\)`/);
   assert.match(skill, /A run logged before Lite 1\.2\.0 has no `type\.seats`: every seat had the alias the user picked for every subagent \(`models\.requested`\), and no effort\./);
   assert.match(skill, /Then give one line per seat, in this exact wording, the same in every run, raw or not:/);

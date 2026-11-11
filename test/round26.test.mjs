@@ -74,9 +74,9 @@ test('full edition SKILL.md: NOTES findings, the user\'s calls, the judge\'s rea
   assert.match(s, /\*\*The user's calls:\*\* give `log` the same results as before \(reuse the input file/);
   assert.match(s, /`notes` never states the user's calls or says one is pending: the appeal items hold them/);
   assert.match(s, /from `My severity is LOW, because the slugs are still unique…` quote `because the slugs are still unique…`/);
-  assert.match(s, /and only then decide whether what's left is a reason: from `My severity is LOW\. The material defines no routes or subdomains, so any collision is only a guess about callers\.` quote `The material defines no routes or subdomains, so any collision is only a guess about callers\.`/);
-  assert.match(s, /A sentence that only states a severity is never a reason, and nor is one the reason can only be inferred from, such as `The parameter comes from the programmer, not from users\.`: then the reason is "no reason given"\./);
-  assert.match(s, /For OVERSTATED and UNDERSTATED it's "the judge gave no reason line", even when the ruling explains which part of the claim doesn't hold/);
+  assert.match(s, /The reason is the first sentence left that names a severity \(HIGH, MED or LOW\), or says the severity is lower or higher or the finding more or less serious, and says more than the severity itself/);
+  assert.match(s, /A sentence that only states a severity, such as `My severity is LOW.`, doesn't count, and nor does a sentence that names no severity, however much it explains/);
+  assert.match(s, /If no sentence counts, the reason is "the judge gave no reason line" for OVERSTATED and UNDERSTATED, which you note in the judge's agent `notes`, and "no reason given" for any other ruling\./);
   assert.match(s, /here or in any later reply to the user \(such as after the user calls an appeal item\), copy it exactly from the saved report: never restate its claim, fix or warnings in your own words; where you don't copy it, cite it\./);
   assert.match(s, /with `\(logged late\)` or, for one made after the report, `\(after review\)` after it; if no call is pending, run `log` again for it then\./);
   assert.match(s, /5\. \*\*Logged late\.\*\* Is there anything you noticed earlier but haven't noted yet\? Note it now, with `\(logged late\)` after it\./);
@@ -144,7 +144,7 @@ liteTest('SKILL.md: word for word in later replies, the case-insensitive search,
 
 liteTest('plan.md: section 2\'s first lines, when started is set, NOTES findings and whole-file read-backs', () => {
   const p1 = liteSection(LITE, 2), p3 = liteSection(LITE, 3);
-  assert.match(p1, /Start the plan with a line or two giving the type, the agent count and the estimate, and saying that bigger material costs more, because every reviewer reads all of it\. The rest of the plan, below, follows them\./);
+  assert.match(p1, /Start the plan with a line or two giving the type, the agent count and the estimate, and saying that bigger material costs more, because every reviewer reads all of it\. The rest of the plan, below, follows them, including the Lite folder notice \(section 3\) if this run will create the folder\./);
   assert.doesNotMatch(p1, /estimate in one or two lines/);
   assert.match(p3, /1\. Save its brief to `briefs\/` \(section 3, "Briefs"\)\.\n2\. Make one `run\.json` change that sets its `started` to `true`\. The same change may hold its `briefChecks` entry\.\n3\. Read `run\.json` back, as below\. A search or a re-read of reports that a step asks for may also come here; no other write and no Agent call may\.\n4\. Make its Agent call/);
   assert.match(p3, /\nThat includes a finding in its NOTES: slot, the one kind of text there that needs noting, although its prompt says findings go in the report/);
@@ -158,8 +158,8 @@ liteTest('sections 5, 7, 8 and 10: early checks, the tally, the judge\'s reason,
   assert.match(s5, /Without a judge, it may end with their tally, taken from your verdicts \(which section 8 records in `ownChecks`\), in exactly this form: `My own checks: 27 hold, 5 hold in part, 0 don't hold\.` That sentence is the only place your report, and `results\.notes`, may take a tally of your verdicts from\./);
   assert.match(s5, /It can't confirm your verdicts, which aren't in the reports/);
   assert.match(s7, /1\. \*\*Read-backs\.\*\* Did you read `run\.json` back in full, with no `offset` or `limit`/);
-  assert.match(s7, /from `My severity is LOW\. The material defines no routes or subdomains, so any collision is only a guess about callers\.` quote `The material defines no routes or subdomains, so any collision is only a guess about callers\.`/);
-  assert.match(s7, /For OVERSTATED and UNDERSTATED it's "the judge gave no reason line", even when the ruling explains which part of the claim doesn't hold, and you note that in the judge's `notes`\./);
+  assert.match(s7, /If no sentence counts, the reason is "the judge gave no reason line" for OVERSTATED and UNDERSTATED, which you note in the judge's `notes`, and "no reason given" for any other ruling\./);
+  assert.match(s7, /Read the judge's ruling for that finding however it's laid out \(one line, several sentences or bullet points\)/);
   assert.match(s7, /An agent whose NOTES: lines hold a finding \(section 3\) has them quoted, the same way, in a section of their own headed `Raised in NOTES, not ruled on`/);
   assert.match(s8, /"call": "kept", "userSeverity": null \}/);
   assert.match(s8, /`userSeverity` is the severity the user changed it to, and `null` unless `call` is `changed`\./);
@@ -198,7 +198,7 @@ liteTest('README: the research intro, the connector limit, the 2.0.0 runs and 2.
   assert.match(r, /Lite 2\.1\.1 corrects one README line, which since brief version 3 had said the appeal sees only the findings the judge dismissed/);
   assert.match(r, /Not tested yet: .*Lite 2\.2\.0's changes in a council run \(a Standard council ran on 2\.1\.2\); a compaction in the middle of a run;/);
   assert.match(r, /From Lite 2\.1\.0 the search matches the names in any mix of upper and lower case/);
-  assert.match(r, /\(such as `\(Lite 2\.2\.0\)`,/);
+  assert.match(r, /\(such as `\(Lite 2\.2\.1\)`,/);
 });
 
 test('the destructive-command example: in both descriptions, within 500 characters, and in all three READMEs', () => {

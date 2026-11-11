@@ -41,7 +41,7 @@ export const VERSION = 3;
 export const BRIEF_VERSIONS = [2, 3];
 // Council Dial's own version, recorded with each plan so a run's setup can be rebuilt exactly. Keep it
 // equal to the plugin manifest's version (a test checks).
-export const PLUGIN_VERSION = '1.8.0';
+export const PLUGIN_VERSION = '1.9.0';
 const COMMANDS = ['plan', 'estimate', 'log', 'update', 'report', 'setup', 'list', 'compare'];
 // The description of what's reviewed is kept at this length when planned and when read back.
 export const TARGET_MAX = 600;
@@ -662,7 +662,7 @@ export function buildPlan(o, target, now = new Date(), usedIds = new Set(), env 
     resultsTemplate: {
       findingsPerReviewer: reviewers.map(() => 0), findingsCombined: 0, confirmed: 0, ...(v >= 3 ? { partlyReal: 0 } : {}), overstated: 0, ...(v >= 3 ? { understated: 0 } : {}), dismissed: 0, verified: null, severity: { high: 0, med: 0, low: 0 }, baseline: o.baseline ? { findings: 0, confirmed: 0, alsoFoundByCouncil: 0 } : null, appeal: appeal ? { ran: false, reviewed: 0, items: [], ...(v >= 3 ? { severityReviewed: 0, severityItems: [] } : {}) } : null,
       agents: steps.flatMap(s => s.agents.map(a => ({ label: a.label, step: s.step, model: a.model ?? 'inherit', effort: a.effort, tokens: null, toolUses: null, durationMs: null }))),
-      severityChanges: o.combine === 'judged' ? [] : null, deviations: [], wallMinutes: null, notes: '',
+      severityChanges: o.combine === 'judged' ? [] : null, deviations: [], userRequests: [], outsideInstructions: [], wallMinutes: null, notes: '',
     },
   };
 }
@@ -730,18 +730,27 @@ function checkSeverityChanges(list) {
 }
 // Deviations: anything Claude did differently from SKILL.md, such as text added to an agent's prompt or
 // a report passed another way, each with the exact text it added or changed.
-function checkDeviations(list) {
+// userRequests (from 1.9.0): what Claude did differently because the user asked; outsideInstructions: instructions
+// found outside SKILL.md and the user's messages, such as a CLAUDE.md line addressed to the council, with what
+// the user decided. Neither is a deviation, so the deviation count stays a count of Claude's own slips.
+const LINE_LISTS = {
+  deviations: 'one per departure from SKILL.md, each with the exact text added or changed',
+  userRequests: 'one per thing done differently because the user asked, with the exact text of any prompt change',
+  outsideInstructions: 'one per instruction found outside SKILL.md and the user\'s messages, with what the user decided',
+};
+function checkLines(list, name = 'deviations') {
   if (list == null) return null;
-  if (!Array.isArray(list)) throw new Error('deviations must be a list of strings, one per departure from SKILL.md, each with the exact text added or changed');
-  if (list.length > 20) throw new Error('deviations can have at most 20 entries');
+  if (!Array.isArray(list)) throw new Error(`${name} must be a list of strings, ${LINE_LISTS[name]}`);
+  if (list.length > 20) throw new Error(`${name} can have at most 20 entries`);
   return list.map((x, i) => {
-    if (typeof x !== 'string') throw new Error(`deviations[${i}] must be a string`);
+    if (typeof x !== 'string') throw new Error(`${name}[${i}] must be a string`);
     const t = x.replace(/\r\n?/g, '\n').replace(/[^\P{Cc}\n\t]/gu, '').replace(HIDDEN, '').trim();
-    if (!t) throw new Error(`deviations[${i}] is empty`);
-    if (t.length > 2000) throw new Error(`deviations[${i}] is ${t.length} characters; the most is 2000`);
+    if (!t) throw new Error(`${name}[${i}] is empty`);
+    if (t.length > 2000) throw new Error(`${name}[${i}] is ${t.length} characters; the most is 2000`);
     return t;
   });
 }
+const checkDeviations = list => checkLines(list, 'deviations');
 
 // combine is the run's combine method, given when logging: a judged run's rulings must then add up.
 export function checkResults(r, strict = true, version = 2, combine = null) {
@@ -756,6 +765,8 @@ export function checkResults(r, strict = true, version = 2, combine = null) {
     agents: checkAgents(r.agents, strict),
     severityChanges: checkSeverityChanges(r.severityChanges),
     deviations: checkDeviations(r.deviations),
+    userRequests: checkLines(r.userRequests, 'userRequests'),
+    outsideInstructions: checkLines(r.outsideInstructions, 'outsideInstructions'),
     notes: notesOf(r.notes, strict),
   };
   // Minutes come in two labelled measures: wallMinutes (wall time, from the start to when the last
@@ -1144,7 +1155,7 @@ function markdown(runs) {
       L.push(`| ${r.runId} | ${cell(r.time.slice(0, 10))} | ${cell(r.label)} | ${cell(r.target)} | ${found} | ${res ? (res.verified ? `${kept(res)} (${res.overstated}${res.understated ? `, ${res.understated} raised` : ''})` : 'unverified') : '-'} | ${res ? (res.verified ? res.dismissed : '-') : '-'} | ${min} | ${tok} | ${r.updates.length ? `${fx.failed} of ${fx.made}` : '-'} | ${res?.baseline ? res.baseline.confirmed : '-'} | ${ap} |`);
     }
     L.push('');
-    const noted = runs.filter(r => r.results && (r.results.severityChanges?.length || r.results.deviations?.length || r.results.agents?.some(a => a.reportUnescaped || a.notes) || r.results.appeal?.severityItems?.length));
+    const noted = runs.filter(r => r.results && (r.results.severityChanges?.length || r.results.deviations?.length || r.results.userRequests?.length || r.results.outsideInstructions?.length || r.results.agents?.some(a => a.reportUnescaped || a.notes) || r.results.appeal?.severityItems?.length));
     if (noted.length) {
       L.push('## Severity changes, severity appeals, deviations, unescaped reports and agent notes', '');
       for (const r of noted) {
@@ -1157,6 +1168,8 @@ function markdown(runs) {
           parts.push(`Appeal on severity: ${si.length} checked (${kind('changed').length} changed severities, ${fl(kind('changed'))} flagged; ${kind('kept at low').length} unchanged LOW findings, ${fl(kind('kept at low'))} flagged): ${si.map(x => `${cell(x.finding)} judge ${x.judge.toUpperCase()}, ${x.view.toUpperCase()}${x.appealSeverity ? ` (${x.appealSeverity.toUpperCase()})` : ''}${x.view === 'fair' ? '' : `, ${x.call}`}${x.userSeverity ? ` to ${x.userSeverity.toUpperCase()}` : ''}`).join('; ')}`);
         }
         if (res.deviations?.length) parts.push(`${res.deviations.length} ${res.deviations.length === 1 ? 'deviation' : 'deviations'} from SKILL.md (their exact text is in review-log.jsonl)`);
+        if (res.userRequests?.length) parts.push(`${res.userRequests.length} ${res.userRequests.length === 1 ? 'change' : 'changes'} the user asked for`);
+        if (res.outsideInstructions?.length) parts.push(`${res.outsideInstructions.length} outside ${res.outsideInstructions.length === 1 ? 'instruction' : 'instructions'} found`);
         const un = (res.agents || []).filter(a => a.reportUnescaped).map(a => cell(a.label));
         if (un.length) parts.push(`Reports unescaped from a completion notice: ${un.join(', ')}`);
         const an = (res.agents || []).filter(a => a.notes).map(a => `${cell(a.label)}: ${inlineMd(a.notes, AGENT_NOTES_MAX)}`);
