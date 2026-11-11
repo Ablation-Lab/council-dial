@@ -126,3 +126,19 @@ liteTest('README and CHANGELOG: the ruling, the reason, userRequests and the new
   assert.match(e, /- \*\*`userRequests` is only what you asked Claude to do differently\.\*\*/);
   assert.match(e, /4,487 measured as before, and 4,458 pasted into a plain prompt, up 4 from 2\.2\.3/);
 });
+
+liteTest('the 2.2.4 text-only commit: the 2.2.3 and 2.2.4 installed runs, Tested, and Planned', () => {
+  const r = readLite('README.md'), c = readLite('CHANGELOG.md');
+  assert.match(r, /Lite has been run in real councils at several versions, from 1\.0\.0 to 2\.2\.4:/);
+  assert.match(r, /the 2\.2\.0 to 2\.2\.4 Standard councils ran from an installed copy/);
+  const runs = c.slice(c.indexOf('\n## Test runs\n'), c.indexOf('\n## Why only Lite is submitted\n'));
+  const at = v => runs.indexOf(`**Lite ${v}, interactive, one judged Standard council from an installed copy**`);
+  assert.ok(at('2.2.2') > 0 && at('2.2.2') < at('2.2.3') && at('2.2.3') < at('2.2.4'));
+  assert.match(runs, /merged 21 reviewer findings \(10, 4 and 7\) into 12: 8 REAL, 2 PARTLY REAL, 1 OVERSTATED and 1 NOT REAL \(3 HIGH, 3 MED, 6 LOW\)/);
+  assert.match(runs, /merged 23 reviewer findings \(10, 6 and 7\) into 12: 7 REAL, 2 PARTLY REAL and 3 OVERSTATED \(2 HIGH, 3 MED, 7 LOW\)/);
+  assert.match(runs, /102,198 in all/);
+  assert.match(runs, /103,835 in all/);
+  const p = c.slice(c.indexOf('## Planned'), c.indexOf('## 2.2.4'));
+  assert.ok(c.indexOf('## Planned') > 0);
+  for (const h of ['**Titles from a ranked-list table.**', '**Council Dial 1.9.2: mirror 2.2.4 in the full edition.**', "**The v3 appeal template's notes for maintainers.**"]) assert.ok(p.includes(h), h);
+});

@@ -35,7 +35,7 @@ liteTest('README: what has been tested, the installed copy\'s read prompt, where
   assert.match(r, /It needs Claude Code 2\.1\.292 or later: Claude Code's docs give 2\.1\.292 for setting a seat's effort, and 2\.1\.271 for `omitClaudeMd`/);
   assert.ok(r.indexOf('It needs Claude Code 2.1.292 or later') < r.indexOf('## Quick start'), 'the minimum version is near the top');
   assert.match(r, /`<plugin root>\/cache\/<marketplace>\/council-dial-lite\/<version>\/skills\/council-dial-lite`/);
-  assert.match(r, /the 2\.2\.0, 2\.2\.1 and 2\.2\.2 Standard councils ran from an installed copy/);
+  assert.match(r, /the 2\.2\.0 to 2\.2\.4 Standard councils ran from an installed copy/);
   assert.doesNotMatch(r, /we've only tested a copy loaded with `--plugin-dir`|We've seen this with a copy loaded with `--plugin-dir`/);
   assert.match(r, /- \*\*The directory listing may show claude\.ai chat and Cowork too\.\*\*/);
   assert.match(r, /In chat, Lite says it needs Claude Code and stops before planning/);

@@ -195,7 +195,7 @@ liteTest('README: the research intro, the connector limit, the 2.0.0 runs and 2.
   assert.match(r, /Lite 2\.1\.0 addresses what the 2\.0\.0 runs left/);
   assert.ok(r.includes("The appeal sees only the judge's own findings (the ones it dismissed and, in brief version 3, the ones in its severity block), never the reviewers' reports") && !r.includes('The appeal sees only the findings it dismissed'));
   assert.match(r, /Lite 2\.1\.1 corrects one README line, which since brief version 3 had said the appeal sees only the findings the judge dismissed/);
-  assert.match(r, /Not tested yet: .*Lite 2\.2\.3's and 2\.2\.4's changes in a complete council run \(the last complete one was a Standard council on an installed copy of 2\.2\.2\); a compaction in the middle of a run;/);
+  assert.match(r, /Not tested yet: .*a reply with spaces or tabs at the end of a line on Lite 2\.2\.4 or later \(the 2\.2\.4 run had none\); a compaction in the middle of a run;/);
   assert.match(r, /From Lite 2\.1\.0 the search matches the names in any mix of upper and lower case/);
   assert.match(r, /\(such as `\(Lite 2\.2\.4\)`,/);
 });

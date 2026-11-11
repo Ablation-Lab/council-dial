@@ -110,7 +110,8 @@ liteTest('README and CHANGELOG: 2.2.3, the measured size, and the 2.2.2 installe
   assert.match(r, /pasting the same text into a plain prompt gave 4,458/);
   assert.match(r, /- After a compaction, Claude Code keeps SKILL\.md \(about 4,490 tokens in our measurement/);
   assert.match(r, /one claude\.ai connector's instructions added about 710 tokens to each council agent's context/);
-  assert.doesNotMatch(c, /## Planned/);
+  // From the 2.2.4 text-only commit, Planned lists the next version's work, above 2.2.4.
+  assert.ok(!c.includes('## Planned') || c.indexOf('## Planned') < c.indexOf('## 2.2.4'));
   assert.ok(c.indexOf('## 2.2.3') < c.indexOf('## 2.2.2'));
   assert.match(c, /Its labels end `\(Lite 2\.2\.3\)`\./);
   assert.match(c, /\*\*The judge's reason\.\*\* In the 2\.2\.2 run the judge wrote each OVERSTATED and UNDERSTATED reason on a line headed "Reason:"/);
